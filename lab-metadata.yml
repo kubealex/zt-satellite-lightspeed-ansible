@@ -1,0 +1,16 @@
+lab:
+  name: "Red Hat Satellite Lab"
+  shortname: "zt-satellite-lightspeed-ansible"
+  maintainer: "Matthew Yee (myee@redhat.com)"
+
+  description:
+    summary: "TODO: Summarize what this lab teaches."
+    goal: "TODO: Describe the goal of this lab."
+    concepts:
+     - "Satellite"
+    use_case: "TODO: Describe the use case for this lab."
+    time_to_complete: "TODO"
+
+  git_ref:
+    production: "main"
+    development: "main"

@@ -1,0 +1,42 @@
+:imagesdir: ../assets/images
+
+== Introduction
+
+TODO: Introduce the lab, its goal, and what the participant will accomplish.
+
+== Lab Environment
+
+The lab environment consists of the following
+
+- Red Hat Satellite Server (Satellite is preinstalled and content/software is synchronized.)
+- Two Red Hat Enterprise Linux hosts, *rhel1.lab* and *rhel2.lab*.
+
+Over the course of this lab, you will:
+
+. TODO: List the high-level steps the participant will follow.
+
+== Log into the Web UI
+
+First, we'll log into the Red Hat Satellite Web User Interface (UI).
+Satellite has been preinstalled and installation is out of scope for
+this lab.
+
+Click on the tab labelled Satellite Web UI as shown in the image below.
+
+You'll need the following credentials to log into the Satellite Web UI.
+
+You can copy and paste each of them below.
+
+[source,js]
+----
+admin
+----
+
+[source,js]
+----
+bc31c9a6-9ff0-11ec-9587-00155d1b0702
+----
+
+Now click `+Log In+`.
+
+You will be taken to the main dashboard.
