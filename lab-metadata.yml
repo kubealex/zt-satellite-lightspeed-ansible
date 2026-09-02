@@ -4,12 +4,12 @@ lab:
   maintainer: "Matthew Yee (myee@redhat.com)"
 
   description:
-    summary: "TODO: Summarize what this lab teaches."
-    goal: "TODO: Describe the goal of this lab."
+    summary: "This lab demonstrates the operation of the closed loop remediation process."
+    goal: "This lab demonstrates the operation of the closed loop remediation process."
     concepts:
      - "Satellite"
-    use_case: "TODO: Describe the use case for this lab."
-    time_to_complete: "TODO"
+    use_case: "This lab demonstrates the operation of the closed loop remediation process."
+    time_to_complete: "1 hour"
 
   git_ref:
     production: "main"
