@@ -15,8 +15,13 @@ tabs:
   - name: "Satellite Web UI"
     url: https://satellite-${guid}.${domain}/
     external: false
+  - name: "AAP Web UI"
+    url: https://aap-${guid}.${domain}/
+    external: false
   - name: "satellite.lab terminal"
     url: /wetty_satellite/ssh/root
+  - name: "aap.lab terminal"
+    url: /wetty_aap/ssh/root
   - name: "rhel1.lab terminal"
     url: /wetty_rhel1/ssh/root
   - name: "rhel2.lab terminal"

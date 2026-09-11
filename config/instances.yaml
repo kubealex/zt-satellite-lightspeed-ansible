@@ -72,6 +72,43 @@ virtualmachines:
           adbHvYfb1fT4Ho1ZMViEUXDQEBHWNEeGx5wBEOopyaKZnFyWJ42dSk3Vv9l4jh0l
           U1n7dd9ahyLiuZayPg==
           -----END CERTIFICATE-----
+  - name: "aap"
+    image: "aap-thunderstrike-090926"
+    bootloader: efi
+    register_satellite: false
+    memory: "32G"
+    cores: 8
+    image_size: "540Gi"
+    tags:
+      - key: "AnsibleGroup"
+        value: "bastions"
+    networks:
+      - default
+    userdata: |
+      #cloud-config
+      fqdn: aap.lab
+      hostname: aap
+      prefer_fqdn_over_hostname: true
+      manage_etc_hosts: true
+    services:
+      - name: aap-https
+        ports:
+          - port: 443
+            protocol: TCP
+            targetPort: 443
+            name: aap-https
+    routes:
+      - name: aap-https
+        host: aap
+        service: aap-https
+        targetPort: 443
+        tls: true
+        tls_termination: edge
+        # NOTE: If AAP's web UI must be reached over reencrypt (backend
+        # serves its own TLS cert), replace tls_termination above with
+        # "reencrypt" and add a tls_destinationCACertificate extracted
+        # from the aap VM once it is provisioned (same pattern as the
+        # satellite-https route above).
   - name: "rhel1"
     image: "rhel-10-1-04-15-26"
     bootloader: efi
