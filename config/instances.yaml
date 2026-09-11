@@ -73,7 +73,7 @@ virtualmachines:
           U1n7dd9ahyLiuZayPg==
           -----END CERTIFICATE-----
   - name: "aap"
-    image: "aap-thunderstrike-090926.qcow2"
+    image: "aap-thunderstrike-090926"
     bootloader: efi
     register_satellite: false
     memory: "32G"
