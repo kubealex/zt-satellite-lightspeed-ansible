@@ -72,7 +72,7 @@ virtualmachines:
           adbHvYfb1fT4Ho1ZMViEUXDQEBHWNEeGx5wBEOopyaKZnFyWJ42dSk3Vv9l4jh0l
           U1n7dd9ahyLiuZayPg==
           -----END CERTIFICATE-----
-  - name: "aap"
+  - name: "aap1"
     image: "aap1-091526"
     bootloader: efi
     register_satellite: false
