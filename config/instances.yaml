@@ -86,28 +86,28 @@ virtualmachines:
       - default
     userdata: |
       #cloud-config
-      fqdn: aap.lab
-      hostname: aap
+      fqdn: aap1.lab
+      hostname: aap1
       prefer_fqdn_over_hostname: true
       manage_etc_hosts: true
     services:
-      - name: aap-https
+      - name: aap1-https
         ports:
           - port: 443
             protocol: TCP
             targetPort: 443
-            name: aap-https
+            name: aap1-https
     routes:
-      - name: aap-https
-        host: aap
-        service: aap-https
+      - name: aap1-https
+        host: aap1
+        service: aap1-https
         targetPort: 443
         tls: true
         tls_termination: edge
         # NOTE: If AAP's web UI must be reached over reencrypt (backend
         # serves its own TLS cert), replace tls_termination above with
         # "reencrypt" and add a tls_destinationCACertificate extracted
-        # from the aap VM once it is provisioned (same pattern as the
+        # from the aap1 VM once it is provisioned (same pattern as the
         # satellite-https route above).
   - name: "rhel1"
     image: "rhel-10-1-04-15-26"
