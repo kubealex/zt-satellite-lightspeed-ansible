@@ -73,7 +73,7 @@ virtualmachines:
           U1n7dd9ahyLiuZayPg==
           -----END CERTIFICATE-----
   - name: "aap1"
-    image: "aap1-091726"
+    image: "aap1-091726-2"
     bootloader: efi
     register_satellite: false
     memory: "32G"
