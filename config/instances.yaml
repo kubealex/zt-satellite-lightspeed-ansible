@@ -116,38 +116,38 @@ virtualmachines:
         # aap1-* golden image is rebuilt. See docs/aap1-golden-image-fixes.md.
         tls_destinationCACertificate: |
           -----BEGIN CERTIFICATE-----
-          MIIF1jCCA76gAwIBAgIUYDeUjbl1Hpok4kHw/ytni+EIdHkwDQYJKoZIhvcNAQEL
+          MIIF1jCCA76gAwIBAgIUUi8p1lraRt1bQbf1Okj4nQKo/TMwDQYJKoZIhvcNAQEL
           BQAwgYIxCzAJBgNVBAYTAlVTMRcwFQYDVQQIDA5Ob3J0aCBDYXJvbGluYTEQMA4G
           A1UEBwwHUmFsZWlnaDEQMA4GA1UECgwHUmVkIEhhdDEQMA4GA1UECwwHQW5zaWJs
           ZTEkMCIGA1UEAwwbQW5zaWJsZSBBdXRvbWF0aW9uIFBsYXRmb3JtMB4XDTI2MDkx
-          NjE1MTY0NloXDTM2MDkxMzE1MTY0NlowgYIxCzAJBgNVBAYTAlVTMRcwFQYDVQQI
+          NzE1NTkzNVoXDTM2MDkxNDE1NTkzNVowgYIxCzAJBgNVBAYTAlVTMRcwFQYDVQQI
           DA5Ob3J0aCBDYXJvbGluYTEQMA4GA1UEBwwHUmFsZWlnaDEQMA4GA1UECgwHUmVk
           IEhhdDEQMA4GA1UECwwHQW5zaWJsZTEkMCIGA1UEAwwbQW5zaWJsZSBBdXRvbWF0
-          aW9uIFBsYXRmb3JtMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAnd32
-          tGccLekDka8kGz4O8atFb4jkQfHZmMCfRjlFwklh9NWp+AW1xdbbexvFWfNg6q+g
-          GMjF1Ve597mNYNnHzTLx7j1oCgopwQZgpi9abfY2Ps0AG3/YdsrdNG0MjgR3CVAO
-          3/44AnBdSpjUO/lYU+UpI7z/33L7PD8PFktSddpwUhsmhyLfnrr1w8xhLaA8dFdX
-          /rbU+lknXWHcMZcSjzDBWygP5oRqVH0lc1LxsqWBaH5PxJC1jWpeDJvGOAk4m9fb
-          dHDNmFvJBumw4MKWdUwmD2uVqkHm+CFb9yqXpHHH5DZzmXJmY9XtJaEG+82SNP0S
-          WlDBaB7FnmotrGrx7vPe/0Jn2EJmJE6Hi38yqjM/F5YERCeVM6PzODlzQCo7HwQW
-          pEG4dPzqPX9zBRF4HhbsM1jSYiWpjJQblUJJWc2XsXRhfFpLGkI6cLZePczy5L/F
-          TKwttW/dWZWgW+P6QHhlRHkdoWbYNp5GGRy0eMd4+SlKLdDCpyjRhV3giqHTY8ku
-          YIBn2ZGMxwNHA2x5eQbRJHtgJuEeonEuoy2aqJ6SBCz6u+14zTh34f1NC8pGqIRY
-          m20Q11zbmQrEvHW8bBs4d1kYT0oKeHvbi3wh42W9/IWdQTpaYKtsy9+oEGbx+CX+
-          0i0SB6VK9U27U0PHp5AjLzJE8T9XQ2crrSRtHGkCAwEAAaNCMEAwDgYDVR0PAQH/
-          BAQDAgIEMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFBMlzPTT6ZiQbYXSTCOC
-          7MnHqHQPMA0GCSqGSIb3DQEBCwUAA4ICAQAWscRVYCF0x1lo8DE4bl3YLNLHvKrq
-          +67BJ7sgzl5KIN6GvWsadiMeHLqVno8cjOcHHIpJP423nsiQmfGiZ+ps7VATHXeM
-          IF4sBdf3MnXLo+FO60K7KPHCxCOZ1f0duaoGKQQ+4WWZHFXgQz9vqSzKXT+tQjq8
-          a35yB5ehCOn0aLfaWUDGDriYMWwGhoz5zAxyDmkJ2mLPr0Jb2n/Yzr9Mgs9Hw7dj
-          DYngHu8uxlXADZrDxquzam887vKFlk4aBo30YxvAR4iwPYHFjrRc6sdgzauIOaBi
-          8AOQfm5u4icwDpQ8hnk5Ty6SBBqX8ceMlp3MDcA/lL9VssHf7NNiO44q/3KQyREL
-          ptXJis848Hhn55kv7PC8MAl2Xo55zYuURffuN5p4utmRgoAlyWOVLeZ8W2cwTCFg
-          LgJQJTmqKYwVNj3BVy0/SMcas0RMNafqI98rxvgwWxJrAFKc1BXLH8xCRPecXwhm
-          ABrx3x1ic+wwxaBo20bOQPm35GWFtps+wyDOo4d4WlXzejXvIGK5p6x7KwwXv7M9
-          +lYusnM+tS+6s8vH63wuHLWEtBv8ZY3mhVVkbCZikgs4pnAghCjQRPcSCnI47Dga
-          ccYFnwH+e/6s+WCEV9hYLQ3OzDopts07aarydBFlaiiFfdhhTbP6mXcC0xW3GgGM
-          BSBohxrYG9smHw==
+          aW9uIFBsYXRmb3JtMIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA1hIe
+          kudKGsfQdgr/bo034mPFykcV3f2yl+F5OfFT0/KAe0/eeTIDn85Fi++/SjwAhMIr
+          Q1J3peYOWEBy49uRtALEdHXkL7gpskFDJpY6QiVDmA3Z1/78Y1+cogxx+3js5EU8
+          xNzuwVSnPQnIUFIVigXnsvcGgS0y465eh9EVyY9qJngJELJ/xY/U2hJw74ZMGkbm
+          D8VyL3Czp14wcu2MXLqe+sWndx+0goJ7Aw62dOc6rVo6V7PyQwpCz5y6/PqfEQGM
+          LiqcNIQCItqamCdlCsE0sY4ew+oh81w0UC4xSVF9y8JX+dhH451YRzD5+5LQMHGV
+          kLrO+I3ycEnMthr5Z80JQ61hMwmsx9t3BtMgK9/fWaTeWKFtjM6J4EYrxr7FE3+i
+          U5FE6N+nU/iM7hgYScWIX2FWrMk5Vq4JxYKopCJ8hVD22NbSM8hKgMf7cn+u6aEl
+          OdsQzOkuqhA4E1g6V95alr/FlLbuQbhzubvNPKqf1bfTgDpctvMvBCq0T06GNYZG
+          js8p9ipHJ6IyHvDNOe4e8LU+8cHjhQGnuxPSyuC1WskAZn8Hetfu46Ka8QY5W0M4
+          7Bjf+CIV/nf80bmH5vuIUBhNndwLryqd1z9BGzRsJVVMSJvTcUp7A2Vc/unqRk+n
+          V0JO3/ys0OUe8hw5bxQUQXT8A+GY3dAbFhmOSOUCAwEAAaNCMEAwDgYDVR0PAQH/
+          BAQDAgIEMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFP7CgPqlpI2LZgpgwiaS
+          Y+saiYqcMA0GCSqGSIb3DQEBCwUAA4ICAQDJ6c0XUnmYs1GbC6neJS/PDRrBAnBl
+          2l8wncdKnlLsalS8EpDpj5dCfm6JxmaSh0bXPDyTZyeQRk8/hJh0jWC6UKqDmzQ0
+          O0WpOmTdFZqGJ2AIHEbilGDIiV9ueaYDGZe6MNxw5DDu0tcaunB0gOn8XA9PD4J+
+          j+sVf2+8eJVHcg3KXNyj5MrCZbB4/I0Iv+5GqfAKsvgeQ9lL7/5nbAGUOLva6Es4
+          sQaEfbKguEk/wGrLp+oDnxWb6tnGzMqqpMxYERRpPykQ+7fk1wpOT8KlU0J7pJ3K
+          NjsFj+Jq68in2fNqJ8jAvHUtKc4+JcAXa4/9O+Ms97XwwVm3uoXuJUK74L1AILP+
+          Otdj6LQD8FfQVaa/4ouy+crYHcTp0+xzoMBnlpXC2hWXKa4DV3WTt9UjdKd9928c
+          Fmf+TVL2YHlotihEdgbUzxRdB7kcmQBtkgM5mOc7BoCofBpuy4XCYzPgd/YH+6ij
+          ZIkJOL+WvxtfjmFR/AapcwvGWNuHRoLmEsngYf5HZy/9tOesvJT4PSsMb892eSnL
+          RgVaWvKfxyXapwpAksKtioJMDxR4Kx88cPtZOHIIrXWc+0oPGCHMMiv+QsepKWPI
+          JusclG/Tge1YbzEntqjYahW8CEuTKHmokHjuVyD0hvAr65kZ2aSD5cnuhfZsjXd+
+          6L6fPX5GFkbcfw==
           -----END CERTIFICATE-----
   - name: "rhel1"
     image: "rhel-10-1-04-15-26"
