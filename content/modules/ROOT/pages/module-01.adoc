@@ -26,6 +26,9 @@ this lab.
 
 Click on the tab labelled Satellite Web UI as shown in the image below.
 
+. Satellite Web UI tab
+image::satellite-web-ui-tab.png[]
+
 You'll need the following credentials to log into the Satellite Web UI.
 
 You can copy and paste each of them below.
@@ -44,4 +47,4 @@ Now click `+Log In+`.
 
 You will be taken to the main dashboard.
 
-Use the same credentials to log into the AAP Web UI.
+Next, *use the same credentials* to log into the AAP Web UI.
