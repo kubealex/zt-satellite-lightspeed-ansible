@@ -1,0 +1,18 @@
+%%{init: {"flowchart": {"defaultRenderer": "elk"}}}%%
+flowchart TB
+    Satellite["satellite<br/>Hostname: satellite.lab<br/>32G RAM / 8 cores / 540Gi disk"]
+    Aap1["aap1<br/>Hostname: aap1.lab<br/>32G RAM / 8 cores / 540Gi disk"]
+    Rhel1["rhel1<br/>Hostname: rhel1.lab<br/>4G RAM / 1 core / 40G disk"]
+    Rhel2["rhel2<br/>Hostname: rhel2.lab<br/>4G RAM / 1 core / 40G disk"]
+
+    Bus((" "))
+
+    Satellite --- Bus
+    Aap1 --- Bus
+    Rhel1 --- Bus
+    Rhel2 --- Bus
+
+    classDef vm fill:#eef3f0,stroke:#2f6f4f,color:#1e3a2c;
+    classDef bus fill:#333333,stroke:#333333,color:#333333;
+    class Satellite,Aap1,Rhel1,Rhel2 vm;
+    class Bus bus;

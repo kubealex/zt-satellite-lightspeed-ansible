@@ -9,13 +9,16 @@ TODO: Introduce the lab, its goal, and what the participant will accomplish.
 The lab environment consists of the following
 
 - Red Hat Satellite Server (Satellite is preinstalled and content/software is synchronized.)
+- An Ansible Automation Platform server, *aap1.lab*.
 - Two Red Hat Enterprise Linux hosts, *rhel1.lab* and *rhel2.lab*.
+
+image::instances-diagram.png[Lab environment instances, as defined in config/instances.yaml]
 
 Over the course of this lab, you will:
 
 . TODO: List the high-level steps the participant will follow.
 
-== Log into the Web UI
+== Log into the Satellite and AAP Web UIs
 
 First, we'll log into the Red Hat Satellite Web User Interface (UI).
 Satellite has been preinstalled and installation is out of scope for
@@ -40,3 +43,5 @@ bc31c9a6-9ff0-11ec-9587-00155d1b0702
 Now click `+Log In+`.
 
 You will be taken to the main dashboard.
+
+Use the same credentials to log into the Ansible Automation Platform Web UI.
