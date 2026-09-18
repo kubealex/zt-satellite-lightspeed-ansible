@@ -8,7 +8,7 @@ TODO: Introduce the lab, its goal, and what the participant will accomplish.
 
 The lab environment consists of the following
 
-- Red Hat Satellite Server (Satellite is preinstalled and content/software is synchronized.)
+- Red Hat Satellite Server *satellite.lab* (Satellite is preinstalled and content/software is synchronized.)
 - An Ansible Automation Platform server, *aap1.lab*.
 - Two Red Hat Enterprise Linux hosts, *rhel1.lab* and *rhel2.lab*.
 
