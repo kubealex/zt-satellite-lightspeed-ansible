@@ -44,3 +44,7 @@ ssh root@rhel2.lab "dnf downgrade -y vim-minimal vim-common 2>/dev/null || true"
 # Trigger vulnerability - downgrade packages with known CVEs
 ssh root@rhel1.lab "dnf downgrade -y gnutls 2>/dev/null || true"
 ssh root@rhel1.lab "dnf install -y tar-1.35-8.el10_1 --allowerasing 2>/dev/null || dnf downgrade -y tar 2>/dev/null || true"
+
+# upload insights data
+ssh root@rhel1.lab "insights-client"
+ssh root@rhel2.lab "insights-client"

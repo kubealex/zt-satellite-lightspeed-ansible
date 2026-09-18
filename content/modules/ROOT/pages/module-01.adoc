@@ -44,4 +44,4 @@ Now click `+Log In+`.
 
 You will be taken to the main dashboard.
 
-Use the same credentials to log into the Ansible Automation Platform Web UI.
+Use the same credentials to log into the AAP Web UI.
