@@ -210,22 +210,26 @@ Still on the `satellite.lab terminal` tab, run:
 
 [source,bash,role="execute"]
 ----
-hammer job-invocation create \
-  --job-template "Run Command - Ansible Default" \
-  --search-query "name = rhel1.lab" \
-  --inputs "command=echo webhook-test"
+hammer job-invocation create --job-template "Run Command - Ansible Default" --search-query "name = rhel1.lab" --inputs "command=echo webhook-test"
 ----
 
 Now switch back to the `aap1.lab terminal` tab and check that the Event
-Stream received it and the rulebook's rule fired:
+Stream received it and the rulebook's rule fired. Run each of the
+following lines as its own command:
 
 [source,bash,role="execute"]
 ----
 export EDA_API="https://localhost/api/eda/v1"
-export EDA_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
+----
 
-curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook" \
-  | python3 -c "import sys,json; d=json.load(sys.stdin)['results'][0]; print('events_received:', d['events_received']); print('last_event_received_at:', d['last_event_received_at'])"
+[source,bash,role="execute"]
+----
+export EDA_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
+----
+
+[source,bash,role="execute"]
+----
+curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook" | python3 -c "import sys,json; d=json.load(sys.stdin)['results'][0]; print('events_received:', d['events_received']); print('last_event_received_at:', d['last_event_received_at'])"
 ----
 
 `events_received` should have gone up by one, and `last_event_received_at`
@@ -234,10 +238,26 @@ Satellite sent, check the Rulebook Activation's logs:
 
 [source,bash,role="execute"]
 ----
-ACTIVATION_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
-INSTANCE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/$ACTIVATION_ID/" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0])")
+ACTIVATION_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+----
+
+[source,bash,role="execute"]
+----
+echo "ACTIVATION_ID=$ACTIVATION_ID"
+----
+
+[source,bash,role="execute"]
+----
+INSTANCE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/$ACTIVATION_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0])")
+----
+
+[source,bash,role="execute"]
+----
+echo "INSTANCE_ID=$INSTANCE_ID"
+----
+
+[source,bash,role="execute"]
+----
 curl -sk -u "$EDA_AUTH" "$EDA_API/activation-instances/$INSTANCE_ID/logs/" | tail -c 2000
 ----
 
