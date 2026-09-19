@@ -35,7 +35,7 @@ image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's 
   command on a host (e.g. `rhel1.lab`) and the job reports success.
 . *Satellite -> AAP Gateway* - Satellite's Webhook fires an HTTPS POST
   to the Event Stream's URL, authenticated with the Basic Auth
-  username/password you configure in Step 3. This request lands on
+  username/password you configure in Step 2. This request lands on
   AAP's Gateway, the single front door for every AAP component on
   `aap1.lab`.
 . *AAP Gateway -> EDA Event Stream* - the Gateway routes the request
@@ -51,38 +51,7 @@ image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's 
 . *Rule fires -> action runs* - the Activation's rulebook evaluates its
   condition (currently `condition: true`, so it always matches) and
   runs its action - right now just logging the event, which is what
-  Step 4 checks for in the Activation's logs.
-
-======
-First, let's look up the Event Stream URL and credentials that `aap1.lab` already generated.
-
-.Step 1 - Look up the Event Stream URL and credentials
-[%collapsible]
-=====
-`aap1.lab`'s setup already generated a Basic Auth username/password and
-an Event Stream URL, and saved them to a file in `aap1-user`'s home
-directory.
-
-Click on the tab labelled `aap1.lab terminal` and log in, then run:
-
-[source,bash,role="execute"]
-----
-sudo -u aap1-user bash -c 'cat ~/.eda_webhook_basic_auth.json'
-----
-
-You should see JSON similar to this (your actual values will differ):
-
-[source,js]
-----
-{
-  "username": "satellite-webhook",
-  "password": "<a long generated password>",
-  "event_stream_url": "https://aap1.lab/eda-event-streams/api/eda/v1/external_event_stream/<uuid>/post/"
-}
-----
-
-You don't need to copy any of these values by hand - Step 3 fetches
-them itself, live, via SSH.
+  Step 3 checks for in the Activation's logs.
 
 [NOTE]
 ====
@@ -91,13 +60,11 @@ The `ansible.eda.webhook` block inside the rulebook
 runtime for its own delivery mechanism once the rulebook's source name
 is linked to the Event Stream - you don't need to worry about it.
 ====
-=====
-======
 
 ======
-Next, we'll create a custom JSON webhook template, since Satellite's built-in ones don't work for this event type.
+First, we'll create a custom JSON webhook template, since Satellite's built-in ones don't work for this event type.
 
-.Step 2 - Create the custom JSON webhook template
+.Step 1 - Create the custom JSON webhook template
 [%collapsible]
 =====
 Satellite's built-in webhook templates don't work for this event type:
@@ -144,13 +111,16 @@ hammer webhook-template create \
 ======
 Now let's create the webhook itself, pointing it at the Event Stream.
 
-.Step 3 - Create the webhook
+.Step 2 - Create the webhook
 [%collapsible]
 =====
 Still on the `satellite.lab terminal` tab, create the webhook itself.
-Rather than copying `EVENT_STREAM_URL`/`WEBHOOK_USER`/`WEBHOOK_PASS` from
-Step 1 by hand, this writes a small script that fetches them itself,
-live, over SSH to `aap1.lab` - that also sidesteps the Event Stream
+`aap1.lab`'s setup already generated the Basic Auth username/password
+and Event Stream URL this needs, and saved them to a file in
+`aap1-user`'s home directory - rather than logging into `aap1.lab` and
+copying those values out by hand, this writes a small script that
+fetches them itself, live, over SSH to `aap1.lab` - that also sidesteps
+the Event Stream
 URL/UUID going stale if the Basic Auth credential is touched again
 later (a copied value would fail with `{"detail":"bad uuid specified"}`
 in that case; a freshly-fetched one never can). Everything below is a
@@ -192,7 +162,7 @@ as shown above.
 ======
 Finally, let's verify the whole pipeline fires end-to-end.
 
-.Step 4 - Verify end-to-end
+.Step 3 - Verify end-to-end
 [%collapsible]
 =====
 First, trigger a remote execution job against one of the RHEL hosts.
@@ -247,7 +217,7 @@ If `events_received` didn't increase, check
 `/var/log/foreman/production.log` on `satellite.lab` around the time you
 ran the job for lines containing `EventSubscriber` or `webhook`. A Ruby
 exception there usually means the webhook *template* is misconfigured
-for this event type - double-check Step 2.
+for this event type - double-check Step 1.
 ====
 =====
 ======
