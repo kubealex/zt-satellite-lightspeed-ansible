@@ -238,7 +238,8 @@ fi
 echo "PROJECT_ID=$PROJECT_ID"
 
 UPDATE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/$PROJECT_ID/update/" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['project_update'])")
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+echo "UPDATE_ID=$UPDATE_ID"
 for i in $(seq 1 30); do
   STATUS=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/project_updates/$UPDATE_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
   echo "project update status=$STATUS"
