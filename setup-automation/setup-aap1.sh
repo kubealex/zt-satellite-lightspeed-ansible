@@ -93,7 +93,13 @@ fi
 git config user.name "aap1-user"
 git config user.email "aap1-user@aap1.lab"
 
-cat > satellite-webhook.yml <<'EOF'
+# EDA requires rulebooks to live in an 'extensions/eda/rulebooks/' or
+# 'rulebooks/' directory within the project root - a rulebook file
+# sitting at the repo root is silently not picked up (the project sync
+# still reports import_state: completed, but with a non-fatal
+# import_error and zero rulebooks found).
+mkdir -p rulebooks
+cat > rulebooks/satellite-webhook.yml <<'EOF'
 ---
 - name: Satellite Remote Execution Webhook
   hosts: all
@@ -111,7 +117,7 @@ cat > satellite-webhook.yml <<'EOF'
 EOF
 
 if ! git diff --quiet 2>/dev/null || [ -z "$(git log -1 2>/dev/null)" ]; then
-  git add satellite-webhook.yml
+  git add rulebooks/satellite-webhook.yml
   git commit -m "Add satellite webhook rulebook" || true
   git branch -M main
 fi

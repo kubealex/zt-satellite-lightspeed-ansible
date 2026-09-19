@@ -130,7 +130,13 @@ Write and push the rulebook:
 ```bash
 mkdir -p ~/satellite-webhook && cd ~/satellite-webhook
 
-cat > satellite-webhook.yml <<'EOF'
+# EDA requires rulebooks to live in an 'extensions/eda/rulebooks/' or
+# 'rulebooks/' directory within the project root - a file sitting at
+# the repo root is silently not picked up (the project sync still
+# reports import_state: completed, but with a non-fatal import_error
+# and zero rulebooks found).
+mkdir -p rulebooks
+cat > rulebooks/satellite-webhook.yml <<'EOF'
 ---
 - name: Satellite Remote Execution Webhook
   hosts: all
@@ -150,7 +156,7 @@ EOF
 git init
 git config user.name "aap1-user"
 git config user.email "aap1-user@aap1.lab"
-git add satellite-webhook.yml
+git add rulebooks/satellite-webhook.yml
 git commit -m "Add satellite webhook rulebook"
 git branch -M main
 git remote add aap "$REPO_URL"
@@ -439,6 +445,16 @@ Received Satellite webhook: {'payload': {'host_name': ..., 'task_result': 'succe
 
 ## Troubleshooting notes (from real issues hit during setup)
 
+- **Project `import_state: completed` but the rulebook lookup fails
+  with 0 results** - check the Project's `import_error` field (it's
+  non-fatal, so `import_state` still shows `completed`):
+  `curl -sk -u "$EDA_AUTH" "$EDA_API/projects/<id>/" | python3 -c "import sys,json; print(json.load(sys.stdin)['import_error'])"`.
+  If it says something like `"The 'extensions/eda/rulebooks' or
+  'rulebooks' directory doesn't exist within the project root"`, the
+  rulebook file needs to live inside a `rulebooks/` subdirectory of the
+  repo, not at the repo root - EDA silently finds zero rulebooks
+  otherwise. Fixed in Part A step 1 above (`rulebooks/satellite-webhook.yml`
+  instead of `satellite-webhook.yml`).
 - **`KeyError: 'id'` from `jq_field`** - the API call didn't return the
   object you expected, almost always because a resource with that exact
   `name` already exists (POST failed with a uniqueness validation error
