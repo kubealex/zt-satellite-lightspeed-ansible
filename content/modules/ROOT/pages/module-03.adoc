@@ -188,7 +188,7 @@ export EDA_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook" | python3 -c "import sys,json; d=json.load(sys.stdin)['results'][0]; print('events_received:', d['events_received']); print('last_event_received_at:', d['last_event_received_at'])"
 ACTIVATION_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
 echo "ACTIVATION_ID=$ACTIVATION_ID"
-INSTANCE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/$ACTIVATION_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0])")
+INSTANCE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/$ACTIVATION_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0]['id'])")
 echo "INSTANCE_ID=$INSTANCE_ID"
 curl -sk -u "$EDA_AUTH" "$EDA_API/activation-instances/$INSTANCE_ID/logs/" | tail -c 2000
 SCRIPT_EOF

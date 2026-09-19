@@ -443,7 +443,7 @@ should be current.
 **3. See the actual received payload** (activation instance logs):
 
 ```bash
-INSTANCE_ID=$(eda_get "/activations/$ACTIVATION_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0])")
+INSTANCE_ID=$(eda_get "/activations/$ACTIVATION_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0]['id'])")
 eda_get "/activation-instances/$INSTANCE_ID/logs/" | tail -c 2000
 ```
 
