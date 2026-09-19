@@ -19,13 +19,22 @@ AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 # the participant for their own Red Hat registry credentials by hand.
 # REGISTRY_PULL_TOKEN is the full base64 "auth" value from a registry
 # service account (username and password already combined), passed
-# through by setup-automation/main.yml. `podman login --authfile` reads
-# it once from a temp file, then caches it in root's default podman
-# auth store, so every later `podman pull`/`build` as root just works
-# without needing that file again.
+# through by setup-automation/main.yml.
+#
+# Write the credential directly to root's DEFAULT podman auth file
+# ($HOME/.config/containers/auth.json, i.e. /root/.config/containers/
+# auth.json - this is what podman falls back to when $XDG_RUNTIME_DIR
+# isn't set, which is the common case for a non-interactive root shell).
+# An earlier version of this wrote to a /tmp file, pointed `podman
+# login --authfile` at that SAME /tmp file, then deleted it - so the
+# credential never reached podman's real default location at all and
+# every later `podman build`/`pull` as root still prompted for auth.
+# Also set REGISTRY_AUTH_FILE in /root/.bashrc as a second, explicit
+# guarantee that works even if some other login shell's $XDG_RUNTIME_DIR
+# happens to be set and would otherwise take precedence.
 if [ -n "${REGISTRY_PULL_TOKEN:-}" ]; then
-  mkdir -p ~/.config/containers
-  cat > /tmp/registry-pull-auth.json <<EOF
+  mkdir -p /root/.config/containers
+  cat > /root/.config/containers/auth.json <<EOF
 {
   "auths": {
     "registry.redhat.io": {
@@ -34,8 +43,9 @@ if [ -n "${REGISTRY_PULL_TOKEN:-}" ]; then
   }
 }
 EOF
-  podman login registry.redhat.io --authfile /tmp/registry-pull-auth.json
-  rm -f /tmp/registry-pull-auth.json
+  if ! grep -q "^export REGISTRY_AUTH_FILE=" /root/.bashrc 2>/dev/null; then
+    echo 'export REGISTRY_AUTH_FILE=/root/.config/containers/auth.json' >> /root/.bashrc
+  fi
 fi
 
 # Passwordless root-to-root SSH between the lab's hosts is already baked
