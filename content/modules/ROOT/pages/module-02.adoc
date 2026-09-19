@@ -1,215 +1,71 @@
 :imagesdir: ../assets/images
 
-== Configure the Satellite Webhook
+== Explore Detected CVEs
 
-In the previous module you logged into both the Satellite and AAP Web
-UIs. Behind the scenes, `aap1.lab` was already configured during
-provisioning with an Event-Driven Ansible (EDA) pipeline: a self-hosted
-rulebook repository, an EDA Project, a Basic Auth credential, an Event
-Stream, and a running Rulebook Activation.
+Before wiring up any automation, let's look at what Satellite already
+knows about. `rhel1.lab` and `rhel2.lab` were seeded with a handful of
+deliberately vulnerable packages during lab setup and have already
+reported their installed packages back to Satellite via `insights-client`.
+Satellite cross-references that against Red Hat's published CVE data to
+tell you exactly which hosts are affected by which CVEs - without
+either host ever leaving the lab network.
 
-What's still missing is the other end of the pipe: *Satellite* doesn't
-know to call that Event Stream yet. In this module, you'll configure
-Satellite's webhook so that every time a remote execution job succeeds
-on a host, Satellite calls AAP's EDA Event Stream - closing the loop.
-
-image::instances-diagram.png[Lab environment instances, as defined in config/instances.yaml]
-
-.How the webhook flow works
-image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's EDA Event Stream, which delivers the event to the running rulebook Activation]
-
-. *Remote execution job succeeds* - Satellite finishes running a
-  command on a host (e.g. `rhel1.lab`) and the job reports success.
-. *Satellite -> AAP Gateway* - Satellite's Webhook fires an HTTPS POST
-  to the Event Stream's URL, authenticated with the Basic Auth
-  username/password you configure in Step 3. This request lands on
-  AAP's Gateway, the single front door for every AAP component on
-  `aap1.lab`.
-. *AAP Gateway -> EDA Event Stream* - the Gateway routes the request
-  internally to the matching `external_event_stream/<uuid>/post/`
-  endpoint inside EDA.
-. *EDA validates the credentials* - the Event Stream checks the
-  request's Basic Auth against the credential it was created with. A
-  mismatch (or a stale/incorrect URL) is rejected here, before the
-  event ever reaches a rulebook.
-. *EDA Event Stream -> Activation* - once validated, EDA delivers the
-  event to the running Rulebook Activation whose source mapping links
-  to this Event Stream.
-. *Rule fires -> action runs* - the Activation's rulebook evaluates its
-  condition (currently `condition: true`, so it always matches) and
-  runs its action - right now just logging the event, which is what
-  Step 4 checks for in the Activation's logs.
-
-.Step 1 - Look up the Event Stream URL and credentials
+.Step 1 - Open the Vulnerability dashboard
 [%collapsible]
 =====
-`aap1.lab`'s setup already generated a Basic Auth username/password and
-an Event Stream URL, and saved them to a file in `aap1-user`'s home
-directory.
+Click on the tab labelled `Satellite Web UI` (log in with the same
+credentials from Module 1, if you aren't already).
 
-Click on the tab labelled `aap1.lab terminal` and log in, then run:
+In the left navigation, go to *Red Hat Lightspeed -> Vulnerability*.
 
-[source,bash,role="execute"]
-----
-sudo -u aap1-user bash -c 'cat ~/.eda_webhook_basic_auth.json'
-----
+This page is powered by Satellite's own, on-premises-hosted Red Hat
+Lightspeed Vulnerability service - despite the similar name, it's not
+the same as the `console.redhat.com` cloud dashboard. Everything you
+see here comes from CVE/vulnerability data that was already synced into
+Satellite during lab setup, cross-referenced against each host's
+package list.
+=====
 
-You should see JSON similar to this (your actual values will differ):
+.Step 2 - Review the detected CVEs
+[%collapsible]
+=====
+You should see a list of CVEs affecting your managed hosts, each with a
+severity rating (Critical/Important/Moderate/Low), a CVSS score, and a
+count of how many systems it affects.
 
-[source,js]
-----
-{
-  "username": "satellite-webhook",
-  "password": "<a long generated password>",
-  "event_stream_url": "https://aap1.lab/eda-event-streams/api/eda/v1/external_event_stream/<uuid>/post/"
-}
-----
+Sort or filter by *Severity* to see the most impactful CVEs first. Note
+a few things as you browse the list:
 
-Keep this terminal tab open - you'll need to copy the `username`,
-`password`, and `event_stream_url` values into the commands below.
+- The *Systems Affected* count links through to exactly which hosts
+  (`rhel1.lab`, `rhel2.lab`, or both) are impacted by each CVE.
+- Not every CVE necessarily has a fix available *yet* in Satellite - a
+  CVE only becomes actionable once Satellite has synced an erratum
+  (patch) that resolves it.
+=====
+
+.Step 3 - Drill into one CVE's details
+[%collapsible]
+=====
+Click into any CVE affecting `rhel1.lab` or `rhel2.lab`. The detail page
+shows:
+
+- The full CVE description and CVSS score
+- Which hosts are affected
+- Which erratum (if any) resolves it, and the exact RPM package(s) it
+  ships
+
+Take note of one CVE and its affected host - you'll see this exact same
+data again in Module 4, but retrieved automatically via API by a custom
+script instead of by clicking through this page by hand.
 
 [NOTE]
 ====
-The `ansible.eda.webhook` block inside the rulebook
-(`satellite-webhook.yml`) is just a placeholder name. EDA swaps it out at
-runtime for its own delivery mechanism once the rulebook's source name
-is linked to the Event Stream - you don't need to worry about it.
+This dashboard is a human-friendly view over the same on-premises
+Lightspeed Vulnerability API and Katello errata API that
+`vulnerability_remediation.py` (introduced in Module 4) queries
+programmatically. Everything you're looking at here is exactly what
+that script sees, too.
 ====
 =====
 
-.Step 2 - Create the custom JSON webhook template
-[%collapsible]
-=====
-Satellite's built-in webhook templates don't work for this event type:
-the default "Webhook Template - Payload Default" template throws
-`undefined method '#id'`, and the other built-in "Remote Execution Host
-Job" template only emits human-readable comments, not JSON. You need a
-custom template that renders real JSON.
-
-Click on the tab labelled `satellite.lab terminal`, log in as `root`,
-and run:
-
-[source,bash,role="execute"]
-----
-cat > /tmp/satellite-remote-execution-host-job-json.erb <<'EOF'
-<%#
-name: Satellite Remote Execution Host Job JSON
-description: JSON payload for actions.remote_execution.run_host_job_succeeded.event.foreman
-snippet: false
-model: WebhookTemplate
--%>
-<%=
-payload({
-  host_name: @object.host_name,
-  host_id: @object.host_id,
-  job_invocation_id: @object.job_invocation_id,
-  task_label: @object.task.label,
-  task_state: @object.task.state,
-  task_result: @object.task.result,
-  task_started_at: @object.task.started_at,
-  task_ended_at: @object.task.ended_at
-})
--%>
-EOF
-
-TEMPLATE_CONTENT=$(cat /tmp/satellite-remote-execution-host-job-json.erb)
-hammer webhook-template create \
-  --name "Satellite Remote Execution Host Job JSON" \
-  --template "$TEMPLATE_CONTENT" \
-  --snippet false
-----
-=====
-
-.Step 3 - Create the webhook
-[%collapsible]
-=====
-Still on the `satellite.lab terminal` tab, create the webhook itself.
-Replace `<EVENT_STREAM_URL>`, `<WEBHOOK_USER>`, and `<WEBHOOK_PASS>` with
-the values you copied in Step 1 - fetch them fresh right before running
-this, rather than reusing values from earlier in a session; the Event
-Stream's URL/UUID can change if the Basic Auth credential is later
-touched, so a stale copy will fail with `{"detail":"bad uuid
-specified"}`:
-
-[source,bash,role="execute"]
-----
-hammer webhook create \
-  --name "AAP Event Driven Ansible Webhook" \
-  --target-url "<EVENT_STREAM_URL>" \
-  --http-method POST \
-  --http-content-type "application/json" \
-  --event "actions.remote_execution.run_host_job_succeeded" \
-  --webhook-template "Satellite Remote Execution Host Job JSON" \
-  --user "<WEBHOOK_USER>" \
-  --password "<WEBHOOK_PASS>" \
-  --verify-ssl false \
-  --enabled true
-----
-
-[IMPORTANT]
-====
-The `--event` value has *no* `.event.foreman` suffix on input, even
-though `hammer webhook info` will display it *with* that suffix
-afterward. Use `actions.remote_execution.run_host_job_succeeded` exactly
-as shown above.
-====
-=====
-
-.Step 4 - Verify end-to-end
-[%collapsible]
-=====
-First, trigger a remote execution job against one of the RHEL hosts.
-Still on the `satellite.lab terminal` tab, run:
-
-[source,bash,role="execute"]
-----
-hammer job-invocation create \
-  --job-template "Run Command - Ansible Default" \
-  --search-query "name = rhel1.lab" \
-  --inputs "command=echo webhook-test"
-----
-
-Now switch back to the `aap1.lab terminal` tab and check that the Event
-Stream received it and the rulebook's rule fired:
-
-[source,bash,role="execute"]
-----
-export EDA_API="https://localhost/api/eda/v1"
-export EDA_AUTH="admin:<your-aap-admin-password>"
-
-curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook" \
-  | python3 -c "import sys,json; d=json.load(sys.stdin)['results'][0]; print('events_received:', d['events_received']); print('last_event_received_at:', d['last_event_received_at'])"
-----
-
-`events_received` should have gone up by one, and `last_event_received_at`
-should show the current time. If you want to see the actual payload
-Satellite sent, check the Rulebook Activation's logs:
-
-[source,bash,role="execute"]
-----
-ACTIVATION_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
-INSTANCE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/$ACTIVATION_ID/" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0])")
-curl -sk -u "$EDA_AUTH" "$EDA_API/activation-instances/$INSTANCE_ID/logs/" | tail -c 2000
-----
-
-You should see a line like:
-
-[source,js]
-----
-Received Satellite webhook: {'payload': {'host_name': 'rhel1.lab', 'task_result': 'success', ...}, 'meta': {...}}
-----
-
-If you see that line with the current timestamp, congratulations - the
-Satellite-to-AAP EDA webhook pipeline is fully wired up end to end.
-
-[TIP]
-====
-If `events_received` didn't increase, check
-`/var/log/foreman/production.log` on `satellite.lab` around the time you
-ran the job for lines containing `EventSubscriber` or `webhook`. A Ruby
-exception there usually means the webhook *template* is misconfigured
-for this event type - double-check Step 2.
-====
-=====
+Proceed to the next module when you're ready.

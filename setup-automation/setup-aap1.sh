@@ -295,12 +295,12 @@ for i in $(seq 1 20); do
   sleep 3
 done
 
-echo "==> 8. Ensure the vulnerability finder + remediation playbook repo (Module 3)"
+echo "==> 8. Ensure the vulnerability finder + remediation playbook repo (Module 4)"
 # Self-hosted the same way as the satellite-webhook repo above, reusing
 # the same deploy key. Pre-populating this here (rather than having the
 # participant paste an ~800-line script and a playbook by hand in
-# Module 3) removes the biggest source of copy/paste errors in that
-# module - Module 3 only explains what each file does and runs commands
+# Module 4) removes the biggest source of copy/paste errors in that
+# module - Module 4 only explains what each file does and runs commands
 # against them, it never creates them.
 mkdir -p ~/git
 if [ ! -d ~/git/vulnerability-remediation.git ]; then
@@ -401,7 +401,7 @@ A custom script written for this lab that:
      today.
   5. When scoped to one host (`--host`), narrows that down to exactly
      the packages that host needs, in a form Ansible's `dnf` module can
-     consume directly - this is what Module 3's rulebook/Job Template
+     consume directly - this is what Module 4's rulebook/Job Template
      pipeline acts on.
 
 How it talks to Satellite

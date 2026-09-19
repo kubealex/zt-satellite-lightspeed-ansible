@@ -1,5 +1,5 @@
 #!/bin/sh
-echo "Solving module-04" >> /tmp/progress.log
+echo "Solving module-05" >> /tmp/progress.log
 
 # This module genuinely spans three hosts (rhel1.lab, satellite.lab,
 # aap1.lab) with a STRICT ORDER that matters: check rhel1 -> trigger on
@@ -10,7 +10,7 @@ echo "Solving module-04" >> /tmp/progress.log
 # preserve that ordering - they'd all fire at once, and rhel1's "before"
 # check could easily run after the job already remediated it. Keeping
 # the whole sequence in one script (hopping to the other hosts via ssh)
-# is intentional here, unlike Module 3 (which has no such ordering
+# is intentional here, unlike Module 4 (which has no such ordering
 # dependency and is correctly a single native solve-aap1.sh instead).
 #
 # Step 1: check the deliberately-vulnerable package versions on rhel1.lab
@@ -19,7 +19,7 @@ ssh -o StrictHostKeyChecking=no root@rhel1.lab \
   "rpm -q openssl openssl-libs libvpx gnutls tar" >> /tmp/progress.log 2>&1
 
 # Step 2: trigger a remote execution job on Satellite - this is what
-# fires the webhook wired up in Module 2/3.
+# fires the webhook wired up in Module 3/4.
 hammer job-invocation create \
   --job-template "Run Command - Ansible Default" \
   --search-query "name = rhel1.lab" \
@@ -52,4 +52,4 @@ REMOTE_EOF
 ssh -o StrictHostKeyChecking=no root@rhel1.lab \
   "rpm -q openssl openssl-libs libvpx gnutls tar" >> /tmp/progress.log 2>&1
 
-echo "Solved module-04" >> /tmp/progress.log
+echo "Solved module-05" >> /tmp/progress.log

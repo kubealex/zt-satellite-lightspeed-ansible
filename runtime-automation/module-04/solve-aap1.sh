@@ -1,16 +1,17 @@
 #!/bin/sh
-echo "Solving module-03" >> /tmp/progress.log
+echo "Solving module-04" >> /tmp/progress.log
 
 # This entire module runs natively on aap1.lab (no satellite.lab action
 # needed at all - EE build, Controller Project/Job Template, EDA
 # credential, and the rulebook/Activation update are all aap1-side).
 # runtime-automation/main.yml already runs this file directly as root on
 # aap1 (it's in the "aap1" node loop), so no SSH hop is needed here,
-# unlike module-02's solve-satellite.sh which genuinely does need one
+# unlike module-03's solve-satellite.sh (Configure the Satellite
+# Webhook) which genuinely does need one
 # (satellite.lab has its own real work: creating the webhook template
 # and webhook).
 #
-# PREREQUISITE (not automated here, see module-03.adoc Step 2's registry
+# PREREQUISITE (not automated here, see module-04.adoc Step 2's registry
 # login): `podman login registry.redhat.io` must already be authenticated
 # on aap1.lab, before this script can build the custom Execution
 # Environment. vulnerability_remediation.py itself (a custom script that
@@ -186,4 +187,4 @@ print(json.dumps({
 }))
 " | curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/activations/" -H "Content-Type: application/json" -d @-
 
-echo "Solved module-03" >> /tmp/progress.log
+echo "Solved module-04" >> /tmp/progress.log

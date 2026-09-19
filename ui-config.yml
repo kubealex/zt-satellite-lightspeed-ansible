@@ -8,12 +8,15 @@ antora:
       label: "Introduction"
       solveButton: false
     - name: module-02
-      label: "Configure the Satellite Webhook"
+      label: "Explore Detected CVEs"
       solveButton: false
     - name: module-03
-      label: "Close the Loop: Automatic Remediation"
+      label: "Configure the Satellite Webhook"
       solveButton: false
     - name: module-04
+      label: "Close the Loop: Automatic Remediation"
+      solveButton: false
+    - name: module-05
       label: "Verify the Closed Loop"
       solveButton: false
 
