@@ -214,7 +214,8 @@ PYEOF
   BASIC_CRED_TYPE_ID="$BASIC_CRED_TYPE_ID" WEBHOOK_USER="$WEBHOOK_USER" WEBHOOK_PASS="$WEBHOOK_PASS" \
     python3 /tmp/eda-setup/build_basic_cred.py > /tmp/eda-setup/basic_cred.json
   BASIC_CRED_ID=$(eda_send POST "/eda-credentials/" /tmp/eda-setup/basic_cred.json | jq_field "['id']")
-  python3 -c "import json,os; json.dump({'username': os.environ['WEBHOOK_USER'], 'password': os.environ['WEBHOOK_PASS']}, open(os.path.expanduser('$BASIC_AUTH_SECRET_FILE'), 'w'))"
+  WEBHOOK_USER="$WEBHOOK_USER" WEBHOOK_PASS="$WEBHOOK_PASS" \
+    python3 -c "import json,os; json.dump({'username': os.environ['WEBHOOK_USER'], 'password': os.environ['WEBHOOK_PASS']}, open(os.path.expanduser('$BASIC_AUTH_SECRET_FILE'), 'w'))"
   chmod 600 "$BASIC_AUTH_SECRET_FILE"
 fi
 echo "BASIC_CRED_ID=$BASIC_CRED_ID (credentials saved to $BASIC_AUTH_SECRET_FILE)"
