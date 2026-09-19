@@ -40,6 +40,9 @@ image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's 
   runs its action - right now just logging the event, which is what
   Step 4 checks for in the Activation's logs.
 
+======
+First, let's look up the Event Stream URL and credentials that `aap1.lab` already generated.
+
 .Step 1 - Look up the Event Stream URL and credentials
 [%collapsible]
 =====
@@ -76,6 +79,10 @@ runtime for its own delivery mechanism once the rulebook's source name
 is linked to the Event Stream - you don't need to worry about it.
 ====
 =====
+======
+
+======
+Next, we'll create a custom JSON webhook template, since Satellite's built-in ones don't work for this event type.
 
 .Step 2 - Create the custom JSON webhook template
 [%collapsible]
@@ -119,6 +126,10 @@ hammer webhook-template create \
   --snippet false
 ----
 =====
+======
+
+======
+Now let's create the webhook itself, pointing it at the Event Stream.
 
 .Step 3 - Create the webhook
 [%collapsible]
@@ -154,6 +165,10 @@ afterward. Use `actions.remote_execution.run_host_job_succeeded` exactly
 as shown above.
 ====
 =====
+======
+
+======
+Finally, let's verify the whole pipeline fires end-to-end.
 
 .Step 4 - Verify end-to-end
 [%collapsible]
@@ -213,3 +228,4 @@ exception there usually means the webhook *template* is misconfigured
 for this event type - double-check Step 2.
 ====
 =====
+======

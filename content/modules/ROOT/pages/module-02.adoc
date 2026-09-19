@@ -10,6 +10,9 @@ Satellite cross-references that against Red Hat's published CVE data to
 tell you exactly which hosts are affected by which CVEs - without
 either host ever leaving the lab network.
 
+======
+First, let's open the Vulnerability dashboard.
+
 .Step 1 - Open the Vulnerability dashboard
 [%collapsible]
 =====
@@ -25,6 +28,10 @@ see here comes from CVE/vulnerability data that was already synced into
 Satellite during lab setup, cross-referenced against each host's
 package list.
 =====
+======
+
+======
+Next, we'll review the CVEs Satellite has already detected.
 
 .Step 2 - Review the detected CVEs
 [%collapsible]
@@ -42,10 +49,14 @@ a few things as you browse the list:
   CVE only becomes actionable once Satellite has synced an erratum
   (patch) that resolves it.
 =====
+======
+
+=======
+Finally, let's drill into one CVE to see exactly what fixes it.
 
 .Step 3 - Drill into one CVE's details
 [%collapsible]
-=====
+======
 Click into any CVE affecting `rhel1.lab` or `rhel2.lab`. The detail page
 shows:
 
@@ -66,6 +77,7 @@ Lightspeed Vulnerability API and Katello errata API that
 programmatically. Everything you're looking at here is exactly what
 that script sees, too.
 ====
-=====
+======
+=======
 
 Proceed to the next module when you're ready.

@@ -37,6 +37,9 @@ straight to Ansible's `dnf` module.
 vulnerable packages installed (seeded during lab setup) so you have
 real CVEs to remediate.
 
+======
+First, let's review the pre-populated finder and remediation files.
+
 .Step 1 - Review the pre-populated finder + remediation files
 [%collapsible]
 =====
@@ -87,6 +90,10 @@ into the install step:
 sudo -u aap1-user cat ~/vulnerability-remediation/find_and_remediate.yml
 ----
 =====
+======
+
+======
+Next, we'll build the custom Execution Environment these files need.
 
 .Step 2 - Build the custom Execution Environment
 [%collapsible]
@@ -140,6 +147,10 @@ fi
 echo "EE_ID=$EE_ID"
 ----
 =====
+======
+
+======
+Now let's create the Satellite API credential the playbook will use.
 
 .Step 3 - Create the Satellite API credential
 [%collapsible]
@@ -190,6 +201,10 @@ fi
 echo "CRED_ID=$CRED_ID"
 ----
 =====
+======
+
+======
+Then we'll create the Controller Project and Job Template.
 
 .Step 4 - Create the Controller Project and Job Template
 [%collapsible]
@@ -272,6 +287,10 @@ template in Step 5. Without it, Controller ignores any extra vars
 supplied at launch time.
 ====
 =====
+======
+
+======
+Finally, let's wire the rulebook to actually launch that Job Template.
 
 .Step 5 - Wire the rulebook to launch the Job Template
 [%collapsible]
@@ -423,3 +442,4 @@ curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/activations/" -H "Content-Type: applic
 '
 ----
 =====
+======

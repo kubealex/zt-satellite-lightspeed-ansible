@@ -8,6 +8,9 @@ affected host, with zero manual intervention. This module proves it -
 you'll trigger the pipeline for real and watch the vulnerable packages
 on `rhel1.lab` get fixed automatically.
 
+======
+First, let's check the current (vulnerable) package versions.
+
 .Step 1 - Check the current (vulnerable) package versions
 [%collapsible]
 =====
@@ -24,6 +27,10 @@ You should see the deliberately-old versions seeded during lab setup
 (e.g. `openssl-3.5.1-4.el10_1`). Keep this output around to compare
 against later.
 =====
+======
+
+======
+Next, we'll trigger a remote execution job on Satellite - this is what fires the webhook.
 
 .Step 2 - Trigger a remote execution job on Satellite
 [%collapsible]
@@ -41,6 +48,10 @@ hammer job-invocation create \
   --inputs "command=echo trigger-remediation"
 ----
 =====
+======
+
+======
+Now let's watch the Job Template it launches run to completion.
 
 .Step 3 - Watch the Job Template launch and finish
 [%collapsible]
@@ -79,6 +90,10 @@ Satellite API credential/URL, the Execution Environment not having
 Step 1).
 ====
 =====
+======
+
+======
+Finally, let's confirm the packages were actually remediated.
 
 .Step 4 - Confirm the packages were actually remediated
 [%collapsible]
@@ -96,3 +111,4 @@ routed it, AAP launched a job that found the applicable CVEs via Red
 Hat Lightspeed, and Ansible installed the exact packages needed to fix
 them, with zero manual intervention.
 =====
+======
