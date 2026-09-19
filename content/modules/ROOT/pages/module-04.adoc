@@ -1,0 +1,98 @@
+:imagesdir: ../assets/images
+
+== Verify the Closed Loop
+
+Module 3 wired everything together: a successful Satellite webhook now
+launches an AAP Job Template that finds and remediates CVEs on the
+affected host, with zero manual intervention. This module proves it -
+you'll trigger the pipeline for real and watch the vulnerable packages
+on `rhel1.lab` get fixed automatically.
+
+.Step 1 - Check the current (vulnerable) package versions
+[%collapsible]
+=====
+Click on the tab labelled `rhel1.lab terminal` and log in as `root`,
+then check the versions of the packages that were deliberately left
+vulnerable during lab setup:
+
+[source,bash,role="execute"]
+----
+rpm -q openssl openssl-libs libvpx gnutls tar
+----
+
+You should see the deliberately-old versions seeded during lab setup
+(e.g. `openssl-3.5.1-4.el10_1`). Keep this output around to compare
+against later.
+=====
+
+.Step 2 - Trigger a remote execution job on Satellite
+[%collapsible]
+=====
+On the `satellite.lab terminal` tab, trigger a remote execution job
+against `rhel1.lab`. This is the same kind of job Satellite runs for
+day-to-day administration - the only difference is that now, a
+*successful* run of one is exactly what fires the webhook:
+
+[source,bash,role="execute"]
+----
+hammer job-invocation create \
+  --job-template "Run Command - Ansible Default" \
+  --search-query "name = rhel1.lab" \
+  --inputs "command=echo trigger-remediation"
+----
+=====
+
+.Step 3 - Watch the Job Template launch and finish
+[%collapsible]
+=====
+Back on `aap1.lab terminal`, watch for the "Vulnerability Package
+Finder and Remediator" Job Template - launched automatically by the
+rulebook you wired up in Module 3 - to start and finish:
+
+[source,bash,role="execute"]
+----
+export CTRL_API="https://localhost/api/controller/v2"
+export CTRL_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
+
+for i in $(seq 1 30); do
+  JOB=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/?job_template__name=Vulnerability%20Package%20Finder%20and%20Remediator&order_by=-id&page_size=1" \
+    | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(json.dumps(r[0]) if r else '')")
+  if [ -n "$JOB" ]; then
+    STATUS=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+    echo "status=$STATUS"
+    [ "$STATUS" = "successful" ] && break
+    [ "$STATUS" = "failed" ] && { echo "$JOB" | python3 -m json.tool; break; }
+  fi
+  sleep 3
+done
+JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/$JOB_ID/stdout/?format=txt" | tail -60
+----
+
+[TIP]
+====
+If the job status shows `failed`, the `stdout` output above is the
+first place to look - most failures at this point are either the
+Satellite API credential/URL, the Execution Environment not having
+`uv` (double-check Module 3 Step 2's build succeeded), or
+`vulnerability_remediation.py` not being present in the repo (Module 3
+Step 1).
+====
+=====
+
+.Step 4 - Confirm the packages were actually remediated
+[%collapsible]
+=====
+Back on `rhel1.lab terminal`, check the same packages from Step 1:
+
+[source,bash,role="execute"]
+----
+rpm -q openssl openssl-libs libvpx gnutls tar
+----
+
+If the versions changed from what you saw in Step 1, congratulations -
+the entire loop is closed: Satellite fired a webhook, EDA validated and
+routed it, AAP launched a job that found the applicable CVEs via Red
+Hat Lightspeed, and Ansible installed the exact packages needed to fix
+them, with zero manual intervention.
+=====

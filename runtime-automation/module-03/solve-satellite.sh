@@ -182,10 +182,7 @@ print(json.dumps({
 " | curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/activations/" -H "Content-Type: application/json" -d @-
 REMOTE_EOF
 
-# Trigger a job on rhel1.lab to fire the whole pipeline
-hammer job-invocation create \
-  --job-template "Run Command - Ansible Default" \
-  --search-query "name = rhel1.lab" \
-  --inputs "command=echo trigger-remediation"
-
+# Triggering the pipeline and verifying it end-to-end is Module 4's job
+# (runtime-automation/module-04/solve-satellite.sh) - this module only
+# wires everything up.
 echo "Solved module-03" >> /tmp/progress.log
