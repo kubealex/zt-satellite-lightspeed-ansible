@@ -74,16 +74,17 @@ eda_send() {
 # response instead of the object you expected - usually means the named
 # resource already exists, or the request payload was rejected).
 jq_field() {
-  python3 -c "
+  python3 -c '
 import sys, json
 raw = sys.stdin.read()
 data = json.loads(raw)
+expr = sys.argv[1]
 try:
-    print(eval('data' + '$1'))
+    print(eval("data" + expr))
 except (KeyError, IndexError, TypeError):
-    sys.stderr.write('jq_field: field $1 not found in response:\n' + raw + '\n')
+    sys.stderr.write("jq_field: field " + expr + " not found in response:\n" + raw + "\n")
     sys.exit(1)
-"
+' "$1"
 }
 ```
 
@@ -121,7 +122,7 @@ git -C ~/git/satellite-webhook.git symbolic-ref HEAD refs/heads/main
 ssh-keygen -t ed25519 -f ~/.ssh/eda_project_deploy_key -N "" -C "eda-project-sync"
 cat ~/.ssh/eda_project_deploy_key.pub >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys ~/.ssh/eda_project_deploy_key
-ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/eda_project_deploy_key aap1-user@localhost true
+ssh -n -o StrictHostKeyChecking=accept-new -i ~/.ssh/eda_project_deploy_key aap1-user@localhost true
 ```
 
 Write and push the rulebook:
@@ -147,6 +148,8 @@ cat > satellite-webhook.yml <<'EOF'
 EOF
 
 git init
+git config user.name "aap1-user"
+git config user.email "aap1-user@aap1.lab"
 git add satellite-webhook.yml
 git commit -m "Add satellite webhook rulebook"
 git branch -M main
@@ -466,7 +469,36 @@ Received Satellite webhook: {'payload': {'host_name': ..., 'task_result': 'succe
   Activation with the new hash.
 - **`git push` fails with "src refspec main does not match any"** -
   means there's no commit yet on that branch; run
-  `git add`, `git commit`, `git branch -M main` first.
+  `git add`, `git commit`, `git branch -M main` first. One common cause:
+  `fatal: empty ident name ... not allowed` from `git commit` on a fresh
+  account with no `user.name`/`user.email` configured - the commit
+  silently never happened. Run
+  `git config user.name "aap1-user" && git config user.email "aap1-user@aap1.lab"`
+  in the repo first (as done in step 1 above), then retry the commit and
+  push.
+- **`jq_field` itself throws `SyntaxError: invalid syntax. Perhaps you
+  forgot a comma?` pointing at something like
+  `eval('data' + '['results'][0]['id']')`** - this was a bug in an
+  earlier version of the `jq_field` helper: it interpolated its `$1`
+  argument directly into the Python source as `'$1'`, but field
+  expressions like `['results'][0]['id']` contain their own single
+  quotes, which prematurely closed that string literal. Fixed by passing
+  the expression as a real `argv` value (`sys.argv[1]`) instead of
+  string-interpolating it into the source - the `jq_field` definition in
+  step 0 above already reflects this fix.
+- **Script hangs forever right after an `==> ...` echo, with no further
+  output, when run as `sudo -u <user> ... bash <<'EOF' ... EOF`** - a
+  classic deadlock: bash invoked with no script file reads its own
+  script *from stdin*, so any `ssh` command inside that heredoc which
+  doesn't redirect its own stdin inherits the still-unread portion of
+  the heredoc as its stdin, and blocks trying to forward it to the
+  remote session - while the parent bash blocks waiting for `ssh` to
+  exit before reading the rest of the script. Fix: always run
+  non-interactive `ssh` calls inside such scripts with `-n` (redirects
+  `ssh`'s stdin from `/dev/null`), as done in Part A step 1 above. This
+  won't reproduce if you run the same `ssh` command standalone from an
+  interactive terminal, since your terminal's stdin isn't a pipe/heredoc
+  - only inside a script fed via heredoc.
 
 Once this is working, the rulebook's `debug` action can be swapped for a
 real action like `run_job_template` (pointing at an AAP Controller job

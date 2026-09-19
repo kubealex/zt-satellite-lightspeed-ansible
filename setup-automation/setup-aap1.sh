@@ -39,16 +39,17 @@ eda_send() {
 }
 
 jq_field() {
-  python3 -c "
+  python3 -c '
 import sys, json
 raw = sys.stdin.read()
 data = json.loads(raw)
+expr = sys.argv[1]
 try:
-    print(eval('data' + '$1'))
+    print(eval("data" + expr))
 except (KeyError, IndexError, TypeError):
-    sys.stderr.write('jq_field: field $1 not found in response:\n' + raw + '\n')
+    sys.stderr.write("jq_field: field " + expr + " not found in response:\n" + raw + "\n")
     sys.exit(1)
-"
+' "$1"
 }
 
 # ensure_id <endpoint-path> <exact-name> - prints the id if a resource
@@ -72,13 +73,15 @@ if ! grep -qF "$(cat ~/.ssh/eda_project_deploy_key.pub)" ~/.ssh/authorized_keys 
   cat ~/.ssh/eda_project_deploy_key.pub >> ~/.ssh/authorized_keys
 fi
 chmod 600 ~/.ssh/authorized_keys ~/.ssh/eda_project_deploy_key
-ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/eda_project_deploy_key aap1-user@localhost true
+ssh -n -o StrictHostKeyChecking=accept-new -i ~/.ssh/eda_project_deploy_key aap1-user@localhost true
 
 mkdir -p ~/satellite-webhook && cd ~/satellite-webhook
 if [ ! -d .git ]; then
   git init
   git remote add aap "$REPO_URL"
 fi
+git config user.name "aap1-user"
+git config user.email "aap1-user@aap1.lab"
 
 cat > satellite-webhook.yml <<'EOF'
 ---
