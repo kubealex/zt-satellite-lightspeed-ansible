@@ -18,6 +18,28 @@ image::instances-diagram.png[Lab environment instances, as defined in config/ins
 .How the webhook flow works
 image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's EDA Event Stream, which delivers the event to the running rulebook Activation]
 
+. *Remote execution job succeeds* - Satellite finishes running a
+  command on a host (e.g. `rhel1.lab`) and the job reports success.
+. *Satellite -> AAP Gateway* - Satellite's Webhook fires an HTTPS POST
+  to the Event Stream's URL, authenticated with the Basic Auth
+  username/password you configure in Step 3. This request lands on
+  AAP's Gateway, the single front door for every AAP component on
+  `aap1.lab`.
+. *AAP Gateway -> EDA Event Stream* - the Gateway routes the request
+  internally to the matching `external_event_stream/<uuid>/post/`
+  endpoint inside EDA.
+. *EDA validates the credentials* - the Event Stream checks the
+  request's Basic Auth against the credential it was created with. A
+  mismatch (or a stale/incorrect URL) is rejected here, before the
+  event ever reaches a rulebook.
+. *EDA Event Stream -> Activation* - once validated, EDA delivers the
+  event to the running Rulebook Activation whose source mapping links
+  to this Event Stream.
+. *Rule fires -> action runs* - the Activation's rulebook evaluates its
+  condition (currently `condition: true`, so it always matches) and
+  runs its action - right now just logging the event, which is what
+  Step 4 checks for in the Activation's logs.
+
 .Step 1 - Look up the Event Stream URL and credentials
 [%collapsible]
 =====
