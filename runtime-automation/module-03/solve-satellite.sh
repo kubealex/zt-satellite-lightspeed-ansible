@@ -1,5 +1,5 @@
 #!/bin/sh
-echo "Solving module-02" >> /tmp/progress.log
+echo "Solving module-03" >> /tmp/progress.log
 
 # This module's real work (creating the webhook template and webhook)
 # only makes sense on satellite.lab, so solve-satellite.sh is correct
@@ -78,4 +78,4 @@ hammer job-invocation create \
   --search-query "name = rhel1.lab" \
   --inputs "command=echo webhook-test"
 
-echo "Solved module-02" >> /tmp/progress.log
+echo "Solved module-03" >> /tmp/progress.log

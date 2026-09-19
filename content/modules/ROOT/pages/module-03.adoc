@@ -68,8 +68,8 @@ You should see JSON similar to this (your actual values will differ):
 }
 ----
 
-Keep this terminal tab open - you'll need to copy the `username`,
-`password`, and `event_stream_url` values into the commands below.
+You don't need to copy any of these values by hand - Step 3 fetches
+them itself, live, via SSH.
 
 [NOTE]
 ====
@@ -135,24 +135,32 @@ Now let's create the webhook itself, pointing it at the Event Stream.
 [%collapsible]
 =====
 Still on the `satellite.lab terminal` tab, create the webhook itself.
-Replace `<EVENT_STREAM_URL>`, `<WEBHOOK_USER>`, and `<WEBHOOK_PASS>` with
-the values you copied in Step 1 - fetch them fresh right before running
-this, rather than reusing values from earlier in a session; the Event
-Stream's URL/UUID can change if the Basic Auth credential is later
-touched, so a stale copy will fail with `{"detail":"bad uuid
-specified"}`:
+Rather than copying `EVENT_STREAM_URL`/`WEBHOOK_USER`/`WEBHOOK_PASS` from
+Step 1 by hand, this fetches them itself, live, over SSH to `aap1.lab` -
+that also sidesteps the Event Stream URL/UUID going stale if the Basic
+Auth credential is touched again later (a copied value would fail with
+`{"detail":"bad uuid specified"}` in that case; a freshly-fetched one
+never can):
 
 [source,bash,role="execute"]
 ----
+EDA_SECRET=$(ssh -o StrictHostKeyChecking=no aap1-user@aap1.lab "cat ~/.eda_webhook_basic_auth.json")
+WEBHOOK_USER=$(echo "$EDA_SECRET" | python3 -c "import sys,json;print(json.load(sys.stdin)['username'])")
+WEBHOOK_PASS=$(echo "$EDA_SECRET" | python3 -c "import sys,json;print(json.load(sys.stdin)['password'])")
+
+EVENT_STREAM_URL=$(ssh -o StrictHostKeyChecking=no aap1-user@aap1.lab \
+  "curl -sk -u 'admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702' 'https://localhost/api/eda/v1/event-streams/?name=Satellite%20Remote%20Execution%20Webhook'" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['url'])")
+
 hammer webhook create \
   --name "AAP Event Driven Ansible Webhook" \
-  --target-url "<EVENT_STREAM_URL>" \
+  --target-url "$EVENT_STREAM_URL" \
   --http-method POST \
   --http-content-type "application/json" \
   --event "actions.remote_execution.run_host_job_succeeded" \
   --webhook-template "Satellite Remote Execution Host Job JSON" \
-  --user "<WEBHOOK_USER>" \
-  --password "<WEBHOOK_PASS>" \
+  --user "$WEBHOOK_USER" \
+  --password "$WEBHOOK_PASS" \
   --verify-ssl false \
   --enabled true
 ----
