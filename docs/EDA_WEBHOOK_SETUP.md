@@ -580,7 +580,7 @@ the same deploy key, at `~/vulnerability-remediation` (bare repo at
 Verify it's there instead of creating it:
 
 ```bash
-sudo -u aap1-user ls -la ~/vulnerability-remediation
+sudo -u aap1-user bash -c 'ls -la ~/vulnerability-remediation'
 ```
 
 See `setup-automation/setup-aap1.sh`'s step 8 in this repo for the exact

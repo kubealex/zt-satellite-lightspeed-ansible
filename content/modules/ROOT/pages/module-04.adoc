@@ -53,7 +53,7 @@ Click on the tab labelled `aap1.lab terminal`, then take a look:
 
 [source,bash,role="execute"]
 ----
-sudo -u aap1-user ls -la ~/vulnerability-remediation
+sudo -u aap1-user bash -c 'ls -la ~/vulnerability-remediation'
 ----
 
 You should see three files. Here's why each one exists:
@@ -86,7 +86,7 @@ into the install step:
 
 [source,bash,role="execute"]
 ----
-sudo -u aap1-user cat ~/vulnerability-remediation/find_and_remediate.yml
+sudo -u aap1-user bash -c 'cat ~/vulnerability-remediation/find_and_remediate.yml'
 ----
 =====
 ======
