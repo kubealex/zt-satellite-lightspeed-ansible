@@ -198,7 +198,7 @@ Stream received it and the rulebook's rule fired:
 [source,bash,role="execute"]
 ----
 export EDA_API="https://localhost/api/eda/v1"
-export EDA_AUTH="admin:<your-aap-admin-password>"
+export EDA_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 
 curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook" \
   | python3 -c "import sys,json; d=json.load(sys.stdin)['results'][0]; print('events_received:', d['events_received']); print('last_event_received_at:', d['last_event_received_at'])"
