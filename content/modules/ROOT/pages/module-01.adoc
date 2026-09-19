@@ -12,7 +12,8 @@ The lab environment consists of the following
 - An Ansible Automation Platform server, *aap1.lab*.
 - Two Red Hat Enterprise Linux hosts, *rhel1.lab* and *rhel2.lab*.
 
-image::instances-diagram.png[Lab environment instances, as defined in config/instances.yaml]
+.Lab environment instances
+image::instances-diagram.png[]
 
 Over the course of this lab, you will:
 
@@ -26,7 +27,7 @@ this lab.
 
 Click on the tab labelled Satellite Web UI as shown in the image below.
 
-. Satellite Web UI tab
+.Satellite Web UI tab
 image::satellite-web-ui-tab.png[]
 
 You'll need the following credentials to log into the Satellite Web UI.
@@ -48,3 +49,8 @@ Now click `+Log In+`.
 You will be taken to the main dashboard.
 
 Next, *use the same credentials* to log into the AAP Web UI.
+
+When you are logged in, you will see the AAP Web UI. Proceed to the next module by clicking the `Next` button at the bottom of the page.
+
+.Next button
+image::next-button.png[]
