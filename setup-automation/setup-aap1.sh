@@ -22,6 +22,16 @@ AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 export AAP_ADMIN_PASSWORD
 sudo -u aap1-user --preserve-env=AAP_ADMIN_PASSWORD -H bash <<'AAPUSER_EOF'
 set -e
+# The outer 'sh -x .../setup-aap1.sh > setup-aap1.log 2>&1' invocation
+# (see setup-automation/main.yml) only traces this outer script's own
+# lines - it never sees inside this heredoc, since that content is fed
+# to a separate bash process via stdin, not read by the outer shell as
+# script text. Turn tracing on again here so the log file actually
+# captures every command this block runs, and add an ERR trap so a
+# failure is unmistakable (with a line number) instead of the log just
+# silently stopping mid-step.
+set -x
+trap 'echo "==> FAILED at line $LINENO (exit code $?)" >&2' ERR
 
 export EDA_API="https://localhost/api/eda/v1"
 export EDA_AUTH="admin:$AAP_ADMIN_PASSWORD"
@@ -247,4 +257,5 @@ done
 
 echo "==> Done. Event Stream URL for Satellite's webhook target-url:"
 echo "$EVENT_STREAM_URL"
+echo "==> SETUP-AAP1: SUCCESS"
 AAPUSER_EOF
