@@ -528,4 +528,315 @@ Received Satellite webhook: {'payload': {'host_name': ..., 'task_result': 'succe
 
 Once this is working, the rulebook's `debug` action can be swapped for a
 real action like `run_job_template` (pointing at an AAP Controller job
-template) to actually act on the event instead of just logging it.
+template) to actually act on the event instead of just logging it - see
+Part D below for exactly that: closing the loop by having the event
+trigger real CVE remediation.
+
+## Part D - Close the loop: launch a remediation Job Template from EDA
+
+This extends the pipeline above so a successful webhook doesn't just get
+logged - it launches an AAP Controller Job Template that runs
+`vulnerability_remediation.py` (from the `vulnerability-package-finder`
+project) scoped to the affected host, then installs whatever RPMs the
+report says are needed to fix the found CVEs.
+
+```mermaid
+sequenceDiagram
+    participant Sat as Satellite
+    participant EDA as EDA Event Stream + Activation
+    participant Ctrl as Controller
+    participant Host as Affected host
+
+    Note over Sat,Host: (as in the Overview diagram above, then:)
+    EDA->>Ctrl: run_job_template("Vulnerability Package Finder and Remediator",<br/>extra_vars: host_name)
+    Ctrl->>Ctrl: run vulnerability_remediation.py --host host_name
+    Ctrl->>Host: ansible.builtin.dnf install (packages_to_install_on_host)
+```
+
+### 1. Self-host the finder script + remediation playbook (as `aap1-user`)
+
+Reuses the *same* deploy key from Part A step 1 - no need for a new one.
+
+```bash
+mkdir -p ~/git
+git init --bare ~/git/vulnerability-remediation.git
+git -C ~/git/vulnerability-remediation.git symbolic-ref HEAD refs/heads/main
+
+mkdir -p ~/vulnerability-remediation && cd ~/vulnerability-remediation
+git init
+git remote add controller ssh://aap1-user@localhost/home/aap1-user/git/vulnerability-remediation.git
+git config user.name "aap1-user"
+git config user.email "aap1-user@aap1.lab"
+
+cat > Containerfile <<'EOF'
+FROM registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9:latest
+RUN pip3 install --no-cache-dir uv
+EOF
+```
+
+> Copy the latest `vulnerability_remediation.py` from the
+> `vulnerability-package-finder` project into
+> `~/vulnerability-remediation/vulnerability_remediation.py` before
+> continuing - it's not reproduced here since it's actively developed
+> elsewhere.
+
+The remediation playbook - a scan play (`localhost`) hands the affected
+host + package list to an install play via `add_host`:
+
+```bash
+cat > ~/vulnerability-remediation/find_and_remediate.yml <<'EOF'
+---
+- name: Find CVE remediations for the affected host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Run vulnerability_remediation.py scoped to the affected host
+      ansible.builtin.command:
+        cmd: >-
+          python3 vulnerability_remediation.py
+          --satellite https://satellite.lab
+          --username {{ satellite_username }}
+          --host {{ host_name }}
+          --insecure
+        chdir: "{{ playbook_dir }}"
+      register: scan_result
+      changed_when: false
+    - name: Parse the JSON report
+      ansible.builtin.set_fact:
+        remediations: "{{ scan_result.stdout | from_json }}"
+    - name: Collect every package that needs installing on this host
+      ansible.builtin.set_fact:
+        packages_to_install: >-
+          {{ remediations
+             | selectattr("packages_to_install_on_host", "defined")
+             | map(attribute="packages_to_install_on_host")
+             | select("truthy")
+             | sum(start=[]) }}
+    - name: Hand the affected host + package list to the next play
+      ansible.builtin.add_host:
+        name: "{{ host_name }}"
+        groups: affected_hosts
+        packages_to_install: "{{ packages_to_install }}"
+
+- name: Install the fixed packages on the affected host
+  hosts: affected_hosts
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install/upgrade each package that remediates a found CVE
+      ansible.builtin.dnf:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ hostvars[inventory_hostname].packages_to_install }}"
+      register: install_results
+      when: hostvars[inventory_hostname].packages_to_install | length > 0
+EOF
+
+cd ~/vulnerability-remediation
+git add Containerfile find_and_remediate.yml vulnerability_remediation.py
+git commit -m "Add vulnerability finder + remediation playbook"
+git branch -M main
+GIT_SSH_COMMAND="ssh -i ~/.ssh/eda_project_deploy_key -o IdentitiesOnly=yes" git push controller main
+```
+
+### 2. Build the custom Execution Environment
+
+`vulnerability_remediation.py` needs `uv` on its `$PATH`, which AAP's
+stock EEs don't ship:
+
+```bash
+podman login registry.redhat.io --username "<your-redhat-registry-username>" --password "$REGISTRY_PULL_TOKEN"
+
+cd ~/vulnerability-remediation
+podman build -t ee-vuln-finder -f Containerfile .
+podman tag ee-vuln-finder:latest aap1.lab/ee-vuln-finder:latest
+podman login --tls-verify=false -u admin -p "$AAP_ADMIN_PASSWORD" aap1.lab
+podman push --tls-verify=false aap1.lab/ee-vuln-finder:latest
+```
+
+Then register it in Controller (`https://localhost/api/controller/v2/`,
+same `ensure_id`-style check-first pattern as Part A):
+
+```bash
+export CTRL_API="https://localhost/api/controller/v2"
+export CTRL_AUTH="admin:$AAP_ADMIN_PASSWORD"
+
+EE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/execution_environments/?name=Vulnerability%20Finder%20EE" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$EE_ID" ]; then
+  EE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/execution_environments/" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Vulnerability Finder EE", "image": "aap1.lab/ee-vuln-finder:latest", "pull": "missing"}' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+fi
+```
+
+### 3. Create the Satellite API credential (Controller)
+
+Injects the Satellite username/password into the playbook automatically
+- the rulebook never needs to know them:
+
+```bash
+CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credential_types/?name=Satellite%20API%20Credentials" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$CRED_TYPE_ID" ]; then
+  CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credential_types/" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Satellite API Credentials", "kind": "cloud",
+         "inputs": {"fields": [{"id": "username", "type": "string", "label": "Username"},
+                                {"id": "password", "type": "string", "label": "Password", "secret": true}],
+                     "required": ["username", "password"]},
+         "injectors": {"extra_vars": {"satellite_username": "{{ username }}"},
+                        "env": {"SATELLITE_PASSWORD": "{{ password }}"}}}' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+fi
+
+CRED_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credentials/" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\": \"Satellite Admin (API)\", \"organization\": 1, \"credential_type\": $CRED_TYPE_ID, \"inputs\": {\"username\": \"admin\", \"password\": \"$AAP_ADMIN_PASSWORD\"}}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+```
+
+### 4. Create the Controller Project and Job Template
+
+```bash
+# Reuse the SAME deploy key as the SCM credential.
+SCM_CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credential_types/?name=Source%20Control" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+DEPLOY_KEY=$(cat ~/.ssh/eda_project_deploy_key)
+SCM_CRED_ID=$(DEPLOY_KEY="$DEPLOY_KEY" SCM_CRED_TYPE_ID="$SCM_CRED_TYPE_ID" python3 -c "
+import json, os
+print(json.dumps({'name': 'Self-hosted repo deploy key (Controller)', 'organization': 1,
+                   'credential_type': int(os.environ['SCM_CRED_TYPE_ID']),
+                   'inputs': {'ssh_key_data': os.environ['DEPLOY_KEY']}}))
+" | curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credentials/" -H "Content-Type: application/json" -d @- \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+
+PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\": \"Vulnerability Package Finder\", \"organization\": 1, \"scm_type\": \"git\",
+       \"scm_url\": \"ssh://aap1-user@localhost/home/aap1-user/git/vulnerability-remediation.git\",
+       \"credential\": $SCM_CRED_ID}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/$PROJECT_ID/update/" > /dev/null
+
+# Any existing inventory works - the playbook targets localhost for the
+# scan, then dynamically adds the affected host via add_host.
+INVENTORY_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/inventories/?page_size=1" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+
+JT_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/job_templates/" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\": \"Vulnerability Package Finder and Remediator\", \"job_type\": \"run\",
+       \"inventory\": $INVENTORY_ID, \"project\": $PROJECT_ID, \"playbook\": \"find_and_remediate.yml\",
+       \"execution_environment\": $EE_ID, \"ask_variables_on_launch\": true}" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/job_templates/$JT_ID/credentials/" \
+  -H "Content-Type: application/json" -d "{\"id\": $CRED_ID}"
+```
+
+> `ask_variables_on_launch: true` is required - without it, Controller
+> ignores the `host_name` extra var the rulebook passes at launch time
+> in step 5 below.
+
+### 5. Wire the rulebook to launch the Job Template
+
+Add an "AAP Controller" credential to EDA so it can call Controller's
+launch API:
+
+```bash
+CTRL_CRED_TYPE_ID=$(eda_get "/credential-types/?name=Red%20Hat%20Ansible%20Automation%20Platform" | jq_field "['results'][0]['id']")
+
+cat > /tmp/eda-setup/build_controller_cred.py <<'PYEOF'
+import json, os
+print(json.dumps({
+    "name": "AAP Controller",
+    "credential_type_id": int(os.environ["CTRL_CRED_TYPE_ID"]),
+    "organization_id": 1,
+    "inputs": {
+        "host": "https://localhost/api/controller/",
+        "username": "admin",
+        "password": os.environ["AAP_ADMIN_PASSWORD"],
+        "verify_ssl": False,
+    },
+}))
+PYEOF
+CTRL_CRED_TYPE_ID="$CTRL_CRED_TYPE_ID" AAP_ADMIN_PASSWORD="$AAP_ADMIN_PASSWORD" \
+  python3 /tmp/eda-setup/build_controller_cred.py > /tmp/eda-setup/controller_cred.json
+CTRL_CRED_ID=$(eda_send POST "/eda-credentials/" /tmp/eda-setup/controller_cred.json | jq_field "['id']")
+```
+
+Add a second rule to the rulebook that launches the Job Template on
+success, passing the affected host through from the event payload:
+
+```bash
+cd ~/satellite-webhook
+cat > rulebooks/satellite-webhook.yml <<'EOF'
+---
+- name: Satellite Remote Execution Webhook
+  hosts: all
+  sources:
+    - ansible.eda.webhook:
+        host: 127.0.0.1
+        port: 5000
+      name: satellite_webhook
+  rules:
+    - name: Log Satellite remote execution success
+      condition: true
+      action:
+        debug:
+          msg: "Received Satellite webhook: {{ event }}"
+
+    - name: Find and remediate CVEs on the affected host
+      condition: event.payload.task_result == "success"
+      action:
+        run_job_template:
+          name: "Vulnerability Package Finder and Remediator"
+          organization: "Default"
+          job_args:
+            extra_vars:
+              host_name: "{{ event.payload.host_name }}"
+EOF
+
+git add rulebooks/satellite-webhook.yml
+git commit -m "Launch the vulnerability finder/remediator job template on success"
+GIT_SSH_COMMAND="ssh -i ~/.ssh/eda_project_deploy_key -o IdentitiesOnly=yes" git push aap main
+```
+
+Resync the EDA Project, then recreate the Activation with **both**
+credentials (Basic Auth + the new AAP Controller one) and the updated
+rulebook hash - same pattern as Part A steps 3 and 7, just with an extra
+credential id in the list:
+
+```bash
+eda_send POST "/projects/$PROJECT_ID/sync/" /tmp/eda-setup/sync_project.json > /dev/null
+# ... poll import_state as in Part A step 3, then re-derive RULEBOOK_ID/RULEBOOK_HASH as in step 4/7 ...
+
+curl -sk -u "$EDA_AUTH" -X DELETE "$EDA_API/activations/$ACTIVATION_ID/"
+# ... rebuild activation.json as in Part A step 7, but with:
+#     "eda_credentials": [<BASIC_CRED_ID>, <CTRL_CRED_ID>]
+```
+
+### 6. Verify end-to-end
+
+`rhel1.lab`/`rhel2.lab` already have deliberately vulnerable packages
+seeded by `setup-satellite.sh` (old `openssl`, `libvpx`, `gnutls`,
+`tar`). Check versions before, trigger a job on Satellite, then check
+Controller for the launched job and versions again afterward:
+
+```bash
+# on rhel1.lab, before:
+rpm -q openssl openssl-libs libvpx gnutls tar
+
+# on satellite.lab:
+hammer job-invocation create --job-template "Run Command - Ansible Default" \
+  --search-query "name = rhel1.lab" --inputs "command=echo trigger-remediation"
+
+# on aap1.lab, watch the job:
+curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/?job_template__name=Vulnerability%20Package%20Finder%20and%20Remediator&order_by=-id&page_size=1" \
+  | python3 -m json.tool
+
+# on rhel1.lab, after - versions should have changed:
+rpm -q openssl openssl-libs libvpx gnutls tar
+```
