@@ -10,6 +10,9 @@ antora:
     - name: module-02
       label: "Configure the Satellite Webhook"
       solveButton: false
+    - name: module-03
+      label: "Close the Loop: Automatic Remediation"
+      solveButton: false
 
 tabs:
   - name: "Satellite Web UI"
