@@ -8,6 +8,19 @@ provisioning with an Event-Driven Ansible (EDA) pipeline: a self-hosted
 rulebook repository, an EDA Project, a Basic Auth credential, an Event
 Stream, and a running Rulebook Activation.
 
+[NOTE]
+====
+EDA has *already* been minimally configured for you to *receive*
+webhooks - you won't be building an EDA pipeline from scratch in this
+module. That's a deliberate choice: this lab is about giving you an
+end-to-end overview of how Satellite and AAP's EDA fit together to
+close the remediation loop, not about teaching you every detail of
+configuring EDA itself. The one piece EDA genuinely can't do for
+you - because it lives entirely on Satellite's side - is telling
+Satellite to call that Event Stream. That's the only thing you'll
+configure in this module.
+====
+
 What's still missing is the other end of the pipe: *Satellite* doesn't
 know to call that Event Stream yet. In this module, you'll configure
 Satellite's webhook so that every time a remote execution job succeeds
