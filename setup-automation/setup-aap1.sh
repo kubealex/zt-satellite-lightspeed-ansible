@@ -116,11 +116,16 @@ cat > rulebooks/satellite-webhook.yml <<'EOF'
           msg: "Received Satellite webhook: {{ event }}"
 EOF
 
-if ! git diff --quiet 2>/dev/null || [ -z "$(git log -1 2>/dev/null)" ]; then
-  git add rulebooks/satellite-webhook.yml
-  git commit -m "Add satellite webhook rulebook" || true
-  git branch -M main
+# 'git diff --quiet' alone only detects changes to already-tracked
+# files - it misses a brand-new untracked file entirely (e.g. this
+# rulebooks/ path on a repo whose working clone still has an older,
+# already-committed version at a different location). Stage first,
+# then check the staged diff so new files are caught too.
+git add rulebooks/satellite-webhook.yml
+if ! git diff --cached --quiet; then
+  git commit -m "Add satellite webhook rulebook"
 fi
+git branch -M main
 GIT_SSH_COMMAND="ssh -i ~/.ssh/eda_project_deploy_key -o IdentitiesOnly=yes" git push aap main
 
 echo "==> 2. Ensure SCM (Source Control) credential"
