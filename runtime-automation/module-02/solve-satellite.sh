@@ -1,6 +1,16 @@
 #!/bin/sh
 echo "Solving module-02" >> /tmp/progress.log
 
+# This module's real work (creating the webhook template and webhook)
+# only makes sense on satellite.lab, so solve-satellite.sh is correct
+# here - there's no corresponding solve-aap1.sh because nothing needs to
+# be CREATED on aap1.lab in this module (that already happened in
+# setup-automation/setup-aap1.sh). The two ssh calls below are read-only
+# lookups of already-existing values (the Basic Auth secret file, the
+# Event Stream's current URL) - satellite.lab needs to know them to
+# build its own webhook command, and there's no shared filesystem
+# between hosts to pass that data any other way.
+#
 # Pull the Basic Auth username/password that setup-automation/setup-aap1.sh
 # already generated and saved on aap1.lab.
 EDA_SECRET=$(ssh -o StrictHostKeyChecking=no aap1-user@aap1.lab "cat ~/.eda_webhook_basic_auth.json")

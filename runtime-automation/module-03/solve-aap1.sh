@@ -1,8 +1,14 @@
 #!/bin/sh
 echo "Solving module-03" >> /tmp/progress.log
 
-# Most of this module's setup happens on aap1.lab, not satellite.lab -
-# SSH over and run it there. Mirrors the steps in module-03.adoc.
+# This entire module runs natively on aap1.lab (no satellite.lab action
+# needed at all - EE build, Controller Project/Job Template, EDA
+# credential, and the rulebook/Activation update are all aap1-side).
+# runtime-automation/main.yml already runs this file directly as root on
+# aap1 (it's in the "aap1" node loop), so no SSH hop is needed here,
+# unlike module-02's solve-satellite.sh which genuinely does need one
+# (satellite.lab has its own real work: creating the webhook template
+# and webhook).
 #
 # PREREQUISITE (not automated here, see module-03.adoc Step 2's registry
 # login): `podman login registry.redhat.io` must already be authenticated
@@ -11,7 +17,6 @@ echo "Solving module-03" >> /tmp/progress.log
 # queries Satellite's on-premises Red Hat Lightspeed Vulnerability
 # service for CVEs and cross-references its Katello errata API for
 # fixes) was already pre-populated by setup-automation/setup-aap1.sh.
-ssh -o StrictHostKeyChecking=no root@aap1.lab /bin/bash <<'REMOTE_EOF'
 set -e
 
 # The vulnerability-remediation repo (Containerfile, find_and_remediate.yml,
@@ -180,9 +185,5 @@ print(json.dumps({
     'source_mappings': source_mappings,
 }))
 " | curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/activations/" -H "Content-Type: application/json" -d @-
-REMOTE_EOF
 
-# Triggering the pipeline and verifying it end-to-end is Module 4's job
-# (runtime-automation/module-04/solve-satellite.sh) - this module only
-# wires everything up.
 echo "Solved module-03" >> /tmp/progress.log

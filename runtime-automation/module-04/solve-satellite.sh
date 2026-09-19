@@ -1,6 +1,18 @@
 #!/bin/sh
 echo "Solving module-04" >> /tmp/progress.log
 
+# This module genuinely spans three hosts (rhel1.lab, satellite.lab,
+# aap1.lab) with a STRICT ORDER that matters: check rhel1 -> trigger on
+# satellite -> poll aap1 -> check rhel1 again. runtime-automation/main.yml
+# runs every host's solve-{host}.sh for a module in parallel (there's no
+# built-in cross-host sequencing), so splitting this into separate
+# solve-rhel1.sh/solve-satellite.sh/solve-aap1.sh files would NOT
+# preserve that ordering - they'd all fire at once, and rhel1's "before"
+# check could easily run after the job already remediated it. Keeping
+# the whole sequence in one script (hopping to the other hosts via ssh)
+# is intentional here, unlike Module 3 (which has no such ordering
+# dependency and is correctly a single native solve-aap1.sh instead).
+#
 # Step 1: check the deliberately-vulnerable package versions on rhel1.lab
 # before triggering anything.
 ssh -o StrictHostKeyChecking=no root@rhel1.lab \
