@@ -15,8 +15,9 @@ on a host, Satellite calls AAP's EDA Event Stream - closing the loop.
 
 image::instances-diagram.png[Lab environment instances, as defined in config/instances.yaml]
 
-== Step 1 - Look up the Event Stream URL and credentials
-
+.Step 1 - Look up the Event Stream URL and credentials
+[%collapsible]
+=====
 `aap1.lab`'s setup already generated a Basic Auth username/password and
 an Event Stream URL, and saved them to a file in `aap1-user`'s home
 directory.
@@ -49,9 +50,11 @@ The `ansible.eda.webhook` block inside the rulebook
 runtime for its own delivery mechanism once the rulebook's source name
 is linked to the Event Stream - you don't need to worry about it.
 ====
+=====
 
-== Step 2 - Create the custom JSON webhook template
-
+.Step 2 - Create the custom JSON webhook template
+[%collapsible]
+=====
 Satellite's built-in webhook templates don't work for this event type:
 the default "Webhook Template - Payload Default" template throws
 `undefined method '#id'`, and the other built-in "Remote Execution Host
@@ -90,9 +93,11 @@ hammer webhook-template create \
   --template "$TEMPLATE_CONTENT" \
   --snippet false
 ----
+=====
 
-== Step 3 - Create the webhook
-
+.Step 3 - Create the webhook
+[%collapsible]
+=====
 Still on the `satellite.lab terminal` tab, create the webhook itself.
 Replace `<EVENT_STREAM_URL>`, `<WEBHOOK_USER>`, and `<WEBHOOK_PASS>` with
 the values you copied in Step 1 - fetch them fresh right before running
@@ -123,9 +128,11 @@ though `hammer webhook info` will display it *with* that suffix
 afterward. Use `actions.remote_execution.run_host_job_succeeded` exactly
 as shown above.
 ====
+=====
 
-== Step 4 - Verify end-to-end
-
+.Step 4 - Verify end-to-end
+[%collapsible]
+=====
 First, trigger a remote execution job against one of the RHEL hosts.
 Still on the `satellite.lab terminal` tab, run:
 
@@ -180,3 +187,4 @@ ran the job for lines containing `EventSubscriber` or `webhook`. A Ruby
 exception there usually means the webhook *template* is misconfigured
 for this event type - double-check Step 2.
 ====
+=====
