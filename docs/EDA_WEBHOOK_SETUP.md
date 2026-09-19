@@ -379,13 +379,23 @@ payload({
 -%>
 EOF
 
+TEMPLATE_CONTENT=$(cat /tmp/satellite-remote-execution-host-job-json.erb)
 hammer webhook-template create \
   --name "Satellite Remote Execution Host Job JSON" \
-  --file /tmp/satellite-remote-execution-host-job-json.erb \
+  --template "$TEMPLATE_CONTENT" \
   --snippet false
 ```
 
 ### 2. Create the Webhook
+
+> Fetch `EVENT_STREAM_URL`/`WEBHOOK_USER`/`WEBHOOK_PASS` fresh right
+> before running this, rather than reusing values noted down earlier -
+> the Event Stream's URL/UUID can change (observed in practice after
+> the associated Basic Auth credential was touched), and a stale URL
+> fails with `{"detail":"bad uuid specified"}` from EDA. If you hit
+> that error, re-fetch the current URL via
+> `curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook"`
+> and `hammer webhook update --id <id> --target-url "<fresh url>"`.
 
 ```bash
 hammer webhook create \

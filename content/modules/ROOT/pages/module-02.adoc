@@ -84,9 +84,10 @@ payload({
 -%>
 EOF
 
+TEMPLATE_CONTENT=$(cat /tmp/satellite-remote-execution-host-job-json.erb)
 hammer webhook-template create \
   --name "Satellite Remote Execution Host Job JSON" \
-  --file /tmp/satellite-remote-execution-host-job-json.erb \
+  --template "$TEMPLATE_CONTENT" \
   --snippet false
 ----
 
@@ -94,7 +95,11 @@ hammer webhook-template create \
 
 Still on the `satellite.lab terminal` tab, create the webhook itself.
 Replace `<EVENT_STREAM_URL>`, `<WEBHOOK_USER>`, and `<WEBHOOK_PASS>` with
-the values you copied in Step 1:
+the values you copied in Step 1 - fetch them fresh right before running
+this, rather than reusing values from earlier in a session; the Event
+Stream's URL/UUID can change if the Basic Auth credential is later
+touched, so a stale copy will fail with `{"detail":"bad uuid
+specified"}`:
 
 [source,bash,role="execute"]
 ----
