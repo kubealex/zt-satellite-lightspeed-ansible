@@ -14,9 +14,9 @@ First, let's check the current (vulnerable) package versions.
 .Step 1 - Check the current (vulnerable) package versions
 [%collapsible]
 =====
-Click on the tab labelled `rhel1.lab terminal` and log in as `root`,
-then check the versions of the packages that were deliberately left
-vulnerable during lab setup:
+Click on the tab labelled `rhel1.lab terminal`, then check the versions
+of the packages that were deliberately left vulnerable during lab
+setup:
 
 [source,bash,role="execute"]
 ----

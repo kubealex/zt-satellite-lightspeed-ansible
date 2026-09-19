@@ -49,8 +49,7 @@ placed on `aap1.lab` for you during lab setup, self-hosted as a git
 repo at `~/vulnerability-remediation` (same pattern as the
 `~/satellite-webhook` repo from Module 3, reusing its deploy key).
 
-Click on the tab labelled `aap1.lab terminal` and log in as `root`, then
-take a look:
+Click on the tab labelled `aap1.lab terminal`, then take a look:
 
 [source,bash,role="execute"]
 ----

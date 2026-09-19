@@ -73,8 +73,7 @@ the default "Webhook Template - Payload Default" template throws
 Job" template only emits human-readable comments, not JSON. You need a
 custom template that renders real JSON.
 
-Click on the tab labelled `satellite.lab terminal`, log in as `root`,
-and run:
+Click on the tab labelled `satellite.lab terminal` and run:
 
 [source,bash,role="execute"]
 ----
