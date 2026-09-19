@@ -25,7 +25,7 @@ Click on the tab labelled `aap1.lab terminal` and log in, then run:
 
 [source,bash,role="execute"]
 ----
-sudo -u aap1-user cat ~/.eda_webhook_basic_auth.json
+sudo -u aap1-user bash -c 'cat ~/.eda_webhook_basic_auth.json'
 ----
 
 You should see JSON similar to this (your actual values will differ):
