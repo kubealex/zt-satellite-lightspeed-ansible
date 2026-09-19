@@ -166,8 +166,19 @@ for i in $(seq 1 20); do
 done
 
 echo "==> 4. Look up the synced rulebook"
-RULEBOOK_ID=$(eda_get "/rulebooks/?project_id=$PROJECT_ID" \
-  | python3 -c "import sys,json; print([r['id'] for r in json.load(sys.stdin)['results'] if r['name']=='satellite-webhook.yml'][0])")
+RULEBOOK_ID=$(eda_get "/rulebooks/?project_id=$PROJECT_ID" | python3 -c '
+import sys, json
+raw = sys.stdin.read()
+data = json.loads(raw)
+matches = [r["id"] for r in data["results"] if r["name"] == "satellite-webhook.yml"]
+if not matches:
+    sys.stderr.write(
+        "No rulebook named satellite-webhook.yml found in project '"$PROJECT_ID"'.\n"
+        "Full /rulebooks/?project_id='"$PROJECT_ID"' response:\n" + raw + "\n"
+    )
+    sys.exit(1)
+print(matches[0])
+')
 echo "RULEBOOK_ID=$RULEBOOK_ID"
 
 echo "==> 5. Ensure Basic Auth (Basic Event Stream) credential"
