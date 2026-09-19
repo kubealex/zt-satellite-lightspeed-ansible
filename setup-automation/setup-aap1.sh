@@ -193,12 +193,32 @@ print(matches[0])
 echo "RULEBOOK_ID=$RULEBOOK_ID"
 
 echo "==> 5. Ensure Basic Auth (Basic Event Stream) credential"
-BASIC_CRED_ID=$(ensure_id "/eda-credentials/" "Satellite Webhook Basic Auth")
 BASIC_AUTH_SECRET_FILE=~/.eda_webhook_basic_auth.json
-if [ -z "$BASIC_CRED_ID" ]; then
-  BASIC_CRED_TYPE_ID=$(eda_get "/credential-types/?name=Basic%20Event%20Stream" | jq_field "['results'][0]['id']")
+
+# EDA credential secrets are write-only via the API - once created,
+# there is no way to read the password back out. So: decide the
+# username/password and persist them to the LOCAL secret file FIRST,
+# before ever creating/touching the remote credential. That way, if
+# this script crashes between creating the remote credential and
+# saving the secret locally, a re-run reuses the same already-saved
+# local secret instead of permanently losing access to whatever
+# password the (already-created) remote credential holds.
+if [ -f "$BASIC_AUTH_SECRET_FILE" ]; then
+  WEBHOOK_USER=$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('$BASIC_AUTH_SECRET_FILE')))['username'])")
+  WEBHOOK_PASS=$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('$BASIC_AUTH_SECRET_FILE')))['password'])")
+  echo "Reusing existing local secret file ($BASIC_AUTH_SECRET_FILE)"
+else
   WEBHOOK_USER="satellite-webhook"
   WEBHOOK_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+  WEBHOOK_USER="$WEBHOOK_USER" WEBHOOK_PASS="$WEBHOOK_PASS" \
+    python3 -c "import json,os; json.dump({'username': os.environ['WEBHOOK_USER'], 'password': os.environ['WEBHOOK_PASS']}, open(os.path.expanduser('$BASIC_AUTH_SECRET_FILE'), 'w'))"
+  chmod 600 "$BASIC_AUTH_SECRET_FILE"
+  echo "Generated new local secret file ($BASIC_AUTH_SECRET_FILE)"
+fi
+
+BASIC_CRED_ID=$(ensure_id "/eda-credentials/" "Satellite Webhook Basic Auth")
+if [ -z "$BASIC_CRED_ID" ]; then
+  BASIC_CRED_TYPE_ID=$(eda_get "/credential-types/?name=Basic%20Event%20Stream" | jq_field "['results'][0]['id']")
   cat > /tmp/eda-setup/build_basic_cred.py <<'PYEOF'
 import json, os
 print(json.dumps({
@@ -214,9 +234,6 @@ PYEOF
   BASIC_CRED_TYPE_ID="$BASIC_CRED_TYPE_ID" WEBHOOK_USER="$WEBHOOK_USER" WEBHOOK_PASS="$WEBHOOK_PASS" \
     python3 /tmp/eda-setup/build_basic_cred.py > /tmp/eda-setup/basic_cred.json
   BASIC_CRED_ID=$(eda_send POST "/eda-credentials/" /tmp/eda-setup/basic_cred.json | jq_field "['id']")
-  WEBHOOK_USER="$WEBHOOK_USER" WEBHOOK_PASS="$WEBHOOK_PASS" \
-    python3 -c "import json,os; json.dump({'username': os.environ['WEBHOOK_USER'], 'password': os.environ['WEBHOOK_PASS']}, open(os.path.expanduser('$BASIC_AUTH_SECRET_FILE'), 'w'))"
-  chmod 600 "$BASIC_AUTH_SECRET_FILE"
 fi
 echo "BASIC_CRED_ID=$BASIC_CRED_ID (credentials saved to $BASIC_AUTH_SECRET_FILE)"
 
