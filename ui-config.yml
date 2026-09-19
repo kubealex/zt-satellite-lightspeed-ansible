@@ -8,7 +8,7 @@ antora:
       label: "Introduction"
       solveButton: false
     - name: module-02
-      label: "Module 02"
+      label: "Configure the Satellite Webhook"
       solveButton: false
 
 tabs:
