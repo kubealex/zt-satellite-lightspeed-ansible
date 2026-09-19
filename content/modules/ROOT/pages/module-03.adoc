@@ -149,45 +149,35 @@ Now let's create the webhook itself, pointing it at the Event Stream.
 =====
 Still on the `satellite.lab terminal` tab, create the webhook itself.
 Rather than copying `EVENT_STREAM_URL`/`WEBHOOK_USER`/`WEBHOOK_PASS` from
-Step 1 by hand, this fetches them itself, live, over SSH to `aap1.lab` -
-that also sidesteps the Event Stream URL/UUID going stale if the Basic
-Auth credential is touched again later (a copied value would fail with
-`{"detail":"bad uuid specified"}` in that case; a freshly-fetched one
-never can). Run each of the following lines as its own command:
+Step 1 by hand, this writes a small script that fetches them itself,
+live, over SSH to `aap1.lab` - that also sidesteps the Event Stream
+URL/UUID going stale if the Basic Auth credential is touched again
+later (a copied value would fail with `{"detail":"bad uuid specified"}`
+in that case; a freshly-fetched one never can). Everything below is a
+single command block that writes the script, makes it executable, and
+runs it:
 
 [source,bash,role="execute"]
 ----
+cat > ~/create-webhook.sh <<'SCRIPT_EOF'
+#!/bin/bash
+set -e
 EDA_SECRET=$(ssh -o StrictHostKeyChecking=no aap1-user@aap1.lab "cat ~/.eda_webhook_basic_auth.json")
-----
-
-[source,bash,role="execute"]
-----
 WEBHOOK_USER=$(echo "$EDA_SECRET" | python3 -c "import sys,json;print(json.load(sys.stdin)['username'])")
-----
-
-[source,bash,role="execute"]
-----
 WEBHOOK_PASS=$(echo "$EDA_SECRET" | python3 -c "import sys,json;print(json.load(sys.stdin)['password'])")
-----
-
-[source,bash,role="execute"]
-----
 EVENT_STREAM_URL=$(ssh -o StrictHostKeyChecking=no aap1-user@aap1.lab "curl -sk -u 'admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702' 'https://localhost/api/eda/v1/event-streams/?name=Satellite%20Remote%20Execution%20Webhook'" | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['url'])")
-----
-
-Before creating the webhook, confirm both values actually came through:
-
-[source,bash,role="execute"]
-----
-echo "WEBHOOK_USER=$WEBHOOK_USER" && echo "EVENT_STREAM_URL=$EVENT_STREAM_URL"
-----
-
-Now create the webhook itself:
-
-[source,bash,role="execute"]
-----
+echo "WEBHOOK_USER=$WEBHOOK_USER"
+echo "EVENT_STREAM_URL=$EVENT_STREAM_URL"
 hammer webhook create --name "AAP Event Driven Ansible Webhook" --target-url "$EVENT_STREAM_URL" --http-method POST --http-content-type "application/json" --event "actions.remote_execution.run_host_job_succeeded" --webhook-template "Satellite Remote Execution Host Job JSON" --user "$WEBHOOK_USER" --password "$WEBHOOK_PASS" --verify-ssl false --enabled true
+SCRIPT_EOF
+chmod +x ~/create-webhook.sh
+~/create-webhook.sh
 ----
+
+The script prints `WEBHOOK_USER=...` and `EVENT_STREAM_URL=...` before
+creating the webhook, so you can immediately tell if either SSH lookup
+came back empty instead of finding out only after `hammer webhook
+create` fails.
 
 [IMPORTANT]
 ====
