@@ -15,6 +15,9 @@ on a host, Satellite calls AAP's EDA Event Stream - closing the loop.
 
 image::instances-diagram.png[Lab environment instances, as defined in config/instances.yaml]
 
+.How the webhook flow works
+image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's EDA Event Stream, which delivers the event to the running rulebook Activation]
+
 .Step 1 - Look up the Event Stream URL and credentials
 [%collapsible]
 =====

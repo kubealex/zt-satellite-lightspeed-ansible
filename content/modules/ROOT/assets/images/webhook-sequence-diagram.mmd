@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant Sat as Satellite
+    participant GW as AAP Gateway (:443)
+    participant EDA as EDA Event Stream
+    participant Act as EDA Activation (rulebook)
+
+    Note over Sat: Remote execution job succeeds
+    Sat->>GW: HTTPS POST (Basic Auth)
+    GW->>EDA: routes to external_event_stream/uuid/post/
+    EDA->>EDA: validates username/password
+    EDA->>Act: delivers event to running rulebook
+    Act->>Act: rule fires -> action runs
