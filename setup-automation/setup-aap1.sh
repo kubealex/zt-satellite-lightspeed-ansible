@@ -14,6 +14,30 @@
 # lab's aap1 image (NOT the aap1-user OS account password).
 AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 
+# Pre-authenticate root's podman against registry.redhat.io so Module 4
+# (Step 2, building the custom Execution Environment) never has to ask
+# the participant for their own Red Hat registry credentials by hand.
+# REGISTRY_PULL_TOKEN is the full base64 "auth" value from a registry
+# service account (username and password already combined), passed
+# through by setup-automation/main.yml. `podman login --authfile` reads
+# it once from a temp file, then caches it in root's default podman
+# auth store, so every later `podman pull`/`build` as root just works
+# without needing that file again.
+if [ -n "${REGISTRY_PULL_TOKEN:-}" ]; then
+  mkdir -p ~/.config/containers
+  cat > /tmp/registry-pull-auth.json <<EOF
+{
+  "auths": {
+    "registry.redhat.io": {
+      "auth": "${REGISTRY_PULL_TOKEN}"
+    }
+  }
+}
+EOF
+  podman login registry.redhat.io --authfile /tmp/registry-pull-auth.json
+  rm -f /tmp/registry-pull-auth.json
+fi
+
 # Everything below runs as aap1-user, since the self-hosted git repo,
 # deploy key, and EDA API calls (as aap1-user's own SSH session) all
 # assume that user's $HOME. --preserve-env carries AAP_ADMIN_PASSWORD

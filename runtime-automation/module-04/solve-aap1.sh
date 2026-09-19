@@ -11,13 +11,13 @@ echo "Solving module-04" >> /tmp/progress.log
 # (satellite.lab has its own real work: creating the webhook template
 # and webhook).
 #
-# PREREQUISITE (not automated here, see module-04.adoc Step 2's registry
-# login): `podman login registry.redhat.io` must already be authenticated
-# on aap1.lab, before this script can build the custom Execution
-# Environment. vulnerability_remediation.py itself (a custom script that
-# queries Satellite's on-premises Red Hat Lightspeed Vulnerability
-# service for CVEs and cross-references its Katello errata API for
-# fixes) was already pre-populated by setup-automation/setup-aap1.sh.
+# root's podman was already logged into registry.redhat.io by
+# setup-automation/setup-aap1.sh during provisioning, so the base image
+# in Containerfile can be pulled here without any credentials of its
+# own. vulnerability_remediation.py itself (a custom script that queries
+# Satellite's on-premises Red Hat Lightspeed Vulnerability service for
+# CVEs and cross-references its Katello errata API for fixes) was also
+# already pre-populated by that same setup script.
 set -e
 
 # The vulnerability-remediation repo (Containerfile, find_and_remediate.yml,

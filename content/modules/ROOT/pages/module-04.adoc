@@ -103,14 +103,13 @@ stock Execution Environments don't ship - that's what the `Containerfile`
 from Step 1 adds. Build and push it to AAP's own Hub registry, then
 register it with Controller.
 
-Still on the `aap1.lab terminal` tab, as root:
+Still on the `aap1.lab terminal` tab, as root. Root's `podman` was
+already logged into `registry.redhat.io` for you during provisioning,
+so the base image in `Containerfile` can be pulled without any
+credentials of your own:
 
 [source,bash,role="execute"]
 ----
-# The base image comes from registry.redhat.io, which needs its own
-# pull credentials (separate from AAP's own admin login).
-podman login registry.redhat.io --username "<your-redhat-registry-username>" --password "$REGISTRY_PULL_TOKEN"
-
 cd /home/aap1-user/vulnerability-remediation
 podman build -t ee-vuln-finder -f Containerfile .
 podman tag ee-vuln-finder:latest aap1.lab/ee-vuln-finder:latest
@@ -118,15 +117,6 @@ podman tag ee-vuln-finder:latest aap1.lab/ee-vuln-finder:latest
 podman login --tls-verify=false -u admin -p "bc31c9a6-9ff0-11ec-9587-00155d1b0702" aap1.lab
 podman push --tls-verify=false aap1.lab/ee-vuln-finder:latest
 ----
-
-[TIP]
-====
-If `registry.redhat.io` pull credentials aren't set up the way this
-lab's `$REGISTRY_PULL_TOKEN` expects, and `podman login` fails, check
-whether the base image is already cached locally first
-(`podman images | grep ee-supported-rhel9`) - some lab images pre-pull
-it, in which case you can skip straight to the `podman build` line.
-====
 
 Now register it as an Execution Environment in Controller:
 
