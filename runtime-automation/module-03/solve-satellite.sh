@@ -4,88 +4,21 @@ echo "Solving module-03" >> /tmp/progress.log
 # Most of this module's setup happens on aap1.lab, not satellite.lab -
 # SSH over and run it there. Mirrors the steps in module-03.adoc.
 #
-# PREREQUISITE (not automated here, see module-03.adoc Step 1's NOTE and
-# Step 2's registry login): vulnerability_remediation.py must already be
-# present at ~/vulnerability-remediation/vulnerability_remediation.py on
-# aap1.lab (as aap1-user), and `podman login registry.redhat.io` must
-# already be authenticated on aap1.lab, before this script can build the
-# custom Execution Environment.
+# PREREQUISITE (not automated here, see module-03.adoc Step 2's registry
+# login): `podman login registry.redhat.io` must already be authenticated
+# on aap1.lab, before this script can build the custom Execution
+# Environment. vulnerability_remediation.py itself (a custom script that
+# queries Satellite's on-premises Red Hat Lightspeed Vulnerability
+# service for CVEs and cross-references its Katello errata API for
+# fixes) was already pre-populated by setup-automation/setup-aap1.sh.
 ssh -o StrictHostKeyChecking=no root@aap1.lab /bin/bash <<'REMOTE_EOF'
 set -e
 
-sudo -u aap1-user bash -c '
-set -e
-mkdir -p ~/git
-if [ ! -d ~/git/vulnerability-remediation.git ]; then
-  git init --bare ~/git/vulnerability-remediation.git
-  git -C ~/git/vulnerability-remediation.git symbolic-ref HEAD refs/heads/main
-fi
-
-mkdir -p ~/vulnerability-remediation && cd ~/vulnerability-remediation
-if [ ! -d .git ]; then
-  git init
-  git remote add controller ssh://aap1-user@localhost/home/aap1-user/git/vulnerability-remediation.git
-fi
-git config user.name "aap1-user"
-git config user.email "aap1-user@aap1.lab"
-
-cat > Containerfile <<CFEOF
-FROM registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9:latest
-RUN pip3 install --no-cache-dir uv
-CFEOF
-
-cat > find_and_remediate.yml <<PBEOF
----
-- name: Find CVE remediations for the affected host
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tasks:
-    - name: Run vulnerability_remediation.py scoped to the affected host
-      ansible.builtin.command:
-        cmd: >-
-          python3 vulnerability_remediation.py
-          --satellite https://satellite.lab
-          --username {{ satellite_username }}
-          --host {{ host_name }}
-          --insecure
-        chdir: "{{ playbook_dir }}"
-      register: scan_result
-      changed_when: false
-    - name: Parse the JSON report
-      ansible.builtin.set_fact:
-        remediations: "{{ scan_result.stdout | from_json }}"
-    - name: Collect every package that needs installing on this host
-      ansible.builtin.set_fact:
-        packages_to_install: >-
-          {{ remediations
-             | selectattr("packages_to_install_on_host", "defined")
-             | map(attribute="packages_to_install_on_host")
-             | select("truthy")
-             | sum(start=[]) }}
-    - name: Hand the affected host + package list to the next play
-      ansible.builtin.add_host:
-        name: "{{ host_name }}"
-        groups: affected_hosts
-        packages_to_install: "{{ packages_to_install }}"
-- name: Install the fixed packages on the affected host
-  hosts: affected_hosts
-  become: true
-  gather_facts: false
-  tasks:
-    - name: Install/upgrade each package that remediates a found CVE
-      ansible.builtin.dnf:
-        name: "{{ item }}"
-        state: present
-      loop: "{{ hostvars[inventory_hostname].packages_to_install }}"
-      when: hostvars[inventory_hostname].packages_to_install | length > 0
-PBEOF
-
-git add Containerfile find_and_remediate.yml vulnerability_remediation.py
-git commit -m "Add vulnerability finder + remediation playbook" || true
-git branch -M main
-GIT_SSH_COMMAND="ssh -i ~/.ssh/eda_project_deploy_key -o IdentitiesOnly=yes" git push controller main
-'
+# The vulnerability-remediation repo (Containerfile, find_and_remediate.yml,
+# vulnerability_remediation.py) was already self-hosted on aap1.lab by
+# setup-automation/setup-aap1.sh during provisioning - just verify it is
+# there rather than re-creating it.
+sudo -u aap1-user test -f /home/aap1-user/vulnerability-remediation/vulnerability_remediation.py
 
 # Build + push the custom EE (assumes registry.redhat.io login already done)
 cd /home/aap1-user/vulnerability-remediation

@@ -5,160 +5,86 @@
 Module 2 wired up the EDA side so that Satellite's webhook reaches a
 running rulebook. So far, that rulebook only logs the event. In this
 module you'll extend it to actually *do* something useful: whenever a
-remote execution job succeeds on a host, AAP will run
-`vulnerability_remediation.py` (from the `vulnerability-package-finder`
-project) against Satellite, scoped to that host, and install whatever
-RPMs are needed to fix the CVEs it finds - closing the remediation loop
-end to end.
+remote execution job succeeds on a host, AAP will run a custom Python
+script, `vulnerability_remediation.py`, against Satellite, scoped to
+that host, and install whatever RPMs are needed to fix the CVEs it
+finds - closing the remediation loop end to end.
+
+`vulnerability_remediation.py` is a script written specifically for
+this lab. It logs in to `satellite.lab` and asks two of its APIs a
+question each:
+
+- *"What CVEs affect my hosts?"* - answered by Satellite's
+  **Red Hat Lightspeed > Vulnerability** page, i.e. the same dashboard
+  you'd click through in the Satellite Web UI. Even though that page's
+  API path contains `insights_cloud`, this is served *entirely
+  on-premises* by Satellite itself, from CVE/vulnerability data that
+  was already synced into Satellite during lab setup
+  (`setup-satellite.sh`'s `cvemap.xml` download) - it is **not** the
+  hosted `console.redhat.com` cloud service, and nothing about this
+  query leaves the lab network.
+- *"Which package fixes each one?"* - answered by Satellite's
+  documented Katello content API, which returns the exact erratum and
+  RPM(s) that remediate a given CVE.
+
+When scoped to a single host (`--host <hostname>`), the script narrows
+that down further: it also pulls the host's installed package list and
+compares versions, so its output is exactly the set of packages that
+host needs - already in a form the remediation playbook can hand
+straight to Ansible's `dnf` module.
 
 `rhel1.lab` and `rhel2.lab` already have a handful of deliberately
 vulnerable packages installed (seeded during lab setup) so you have
 real CVEs to remediate.
 
-.Step 1 - Self-host the vulnerability finder + remediation playbook
+.Step 1 - Review the pre-populated finder + remediation files
 [%collapsible]
 =====
-Click on the tab labelled `aap1.lab terminal` and log in as `root`.
+To keep this module focused on *wiring things together* rather than on
+copy-pasting an ~800-line script by hand, three files were already
+placed on `aap1.lab` for you during lab setup, self-hosted as a git
+repo at `~/vulnerability-remediation` (same pattern as the
+`~/satellite-webhook` repo from Module 2, reusing its deploy key).
 
-This reuses the same self-hosted-git-repo pattern from Module 2, and the
-*same* deploy key you already generated there
-(`~/.ssh/eda_project_deploy_key`) - no need to create a new one.
-
-[source,bash,role="execute"]
-----
-sudo -u aap1-user bash -c '
-set -e
-mkdir -p ~/git
-if [ ! -d ~/git/vulnerability-remediation.git ]; then
-  git init --bare ~/git/vulnerability-remediation.git
-  git -C ~/git/vulnerability-remediation.git symbolic-ref HEAD refs/heads/main
-fi
-
-mkdir -p ~/vulnerability-remediation && cd ~/vulnerability-remediation
-if [ ! -d .git ]; then
-  git init
-  git remote add controller ssh://aap1-user@localhost/home/aap1-user/git/vulnerability-remediation.git
-fi
-git config user.name "aap1-user"
-git config user.email "aap1-user@aap1.lab"
-'
-----
-
-Now write the Execution Environment `Containerfile`:
+Click on the tab labelled `aap1.lab terminal` and log in as `root`, then
+take a look:
 
 [source,bash,role="execute"]
 ----
-sudo -u aap1-user bash -c '
-cat > ~/vulnerability-remediation/Containerfile <<'"'"'EOF'"'"'
-# Custom Execution Environment: adds `uv` (needed by
-# vulnerability_remediation.py'"'"'s `#!/usr/bin/env -S uv run --script`
-# shebang) on top of AAP'"'"'s supported base EE image.
-FROM registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9:latest
-
-RUN pip3 install --no-cache-dir uv
-EOF
-'
+sudo -u aap1-user ls -la ~/vulnerability-remediation
 ----
 
-Next, write the remediation playbook, `find_and_remediate.yml`. It runs
-the finder script scoped to the host that triggered the webhook
-(`--host {{ host_name }}`), collects every package the report says is
-needed on that host, then installs them:
+You should see three files. Here's why each one exists:
+
+[cols="1,3"]
+|===
+| File | Why it's needed
+
+| `vulnerability_remediation.py`
+| The custom script explained above - queries Satellite's on-premises
+  Red Hat Lightspeed Vulnerability data for CVEs, cross-references
+  Satellite's Katello errata API for fixes, and (with `--host`) narrows
+  that down to exactly the packages one host needs.
+
+| `find_and_remediate.yml`
+| The Ansible playbook the Job Template (Step 4) actually runs. It calls
+  `vulnerability_remediation.py` scoped to the host that triggered the
+  webhook, then installs whatever packages the report returns via
+  `ansible.builtin.dnf`.
+
+| `Containerfile`
+| Defines the custom Execution Environment built in Step 2.
+  `vulnerability_remediation.py` needs `uv` on its `$PATH` (its
+  `#!/usr/bin/env -S uv run --script` shebang), which AAP's stock
+  Execution Environments don't ship.
+|===
+
+Take a look at the playbook to see exactly how the scan result feeds
+into the install step:
 
 [source,bash,role="execute"]
 ----
-sudo -u aap1-user bash -c '
-cat > ~/vulnerability-remediation/find_and_remediate.yml <<'"'"'EOF'"'"'
----
-- name: Find CVE remediations for the affected host
-  hosts: localhost
-  connection: local
-  gather_facts: false
-  tasks:
-    - name: Run vulnerability_remediation.py scoped to the affected host
-      ansible.builtin.command:
-        cmd: >-
-          python3 vulnerability_remediation.py
-          --satellite https://satellite.lab
-          --username {{ satellite_username }}
-          --host {{ host_name }}
-          --insecure
-        chdir: "{{ playbook_dir }}"
-      register: scan_result
-      changed_when: false
-
-    - name: Parse the JSON report
-      ansible.builtin.set_fact:
-        remediations: "{{ scan_result.stdout | from_json }}"
-
-    - name: Collect every package that needs installing on this host
-      ansible.builtin.set_fact:
-        packages_to_install: >-
-          {{ remediations
-             | selectattr("packages_to_install_on_host", "defined")
-             | map(attribute="packages_to_install_on_host")
-             | select("truthy")
-             | sum(start=[]) }}
-
-    - name: Show what will be installed
-      ansible.builtin.debug:
-        msg: >-
-          {{ packages_to_install if packages_to_install
-             else "No remediation packages found for " + host_name }}
-
-    - name: Hand the affected host + package list to the next play
-      ansible.builtin.add_host:
-        name: "{{ host_name }}"
-        groups: affected_hosts
-        packages_to_install: "{{ packages_to_install }}"
-
-- name: Install the fixed packages on the affected host
-  hosts: affected_hosts
-  become: true
-  gather_facts: false
-  tasks:
-    - name: Install/upgrade each package that remediates a found CVE
-      ansible.builtin.dnf:
-        name: "{{ item }}"
-        state: present
-      loop: "{{ hostvars[inventory_hostname].packages_to_install }}"
-      register: install_results
-      when: hostvars[inventory_hostname].packages_to_install | length > 0
-
-    - name: Show what changed
-      ansible.builtin.debug:
-        msg: "{{ item.item }}: {{ '"'"'installed/upgraded'"'"' if item.changed else '"'"'already up to date'"'"' }}"
-      loop: "{{ install_results.results | default([]) }}"
-      when: install_results.results is defined
-EOF
-'
-----
-
-[NOTE]
-====
-This module intentionally does *not* ship a full copy of
-`vulnerability_remediation.py` inline. It's a large, actively-developed
-script - grab the latest version from the `vulnerability-package-finder`
-project and place it at
-`~/vulnerability-remediation/vulnerability_remediation.py` on `aap1.lab`
-(as `aap1-user`) before continuing. Whatever mechanism your environment
-provides for transferring files (e.g. `scp`, pasting into a heredoc, or
-a shared drop location) works - the important part is that the file
-ends up in that repo directory before Step 1's `git add`/`commit`/`push`
-below.
-====
-
-Once the script is in place, commit and push everything:
-
-[source,bash,role="execute"]
-----
-sudo -u aap1-user bash -c '
-cd ~/vulnerability-remediation
-git add Containerfile find_and_remediate.yml vulnerability_remediation.py
-git commit -m "Add vulnerability finder + remediation playbook" || true
-git branch -M main
-GIT_SSH_COMMAND="ssh -i ~/.ssh/eda_project_deploy_key -o IdentitiesOnly=yes" git push controller main
-'
+sudo -u aap1-user cat ~/vulnerability-remediation/find_and_remediate.yml
 ----
 =====
 
