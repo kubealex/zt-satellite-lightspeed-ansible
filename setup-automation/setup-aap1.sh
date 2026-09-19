@@ -38,6 +38,26 @@ EOF
   rm -f /tmp/registry-pull-auth.json
 fi
 
+# Passwordless root-to-root SSH between the lab's hosts is already baked
+# into the golden images (e.g. satellite.lab's root can already SSH into
+# aap1.lab's root with no password) - but aap1-user is a separate OS
+# account on the aap1 image, so it never inherited that same trust.
+# Module 3's solve script (and its Step 1/3 instructions) need
+# satellite.lab's root to SSH into aap1-user@aap1.lab with no password
+# prompt, so copy whatever key(s) already let root in, into aap1-user's
+# authorized_keys too. This is idempotent: re-running just re-appends
+# any keys not already present.
+if [ -f /root/.ssh/authorized_keys ]; then
+  install -d -m 700 -o aap1-user -g aap1-user /home/aap1-user/.ssh
+  touch /home/aap1-user/.ssh/authorized_keys
+  comm -23 \
+    <(sort -u /root/.ssh/authorized_keys) \
+    <(sort -u /home/aap1-user/.ssh/authorized_keys) \
+    >> /home/aap1-user/.ssh/authorized_keys
+  chmod 600 /home/aap1-user/.ssh/authorized_keys
+  chown aap1-user:aap1-user /home/aap1-user/.ssh/authorized_keys
+fi
+
 # Everything below runs as aap1-user, since the self-hosted git repo,
 # deploy key, and EDA API calls (as aap1-user's own SSH session) all
 # assume that user's $HOME. --preserve-env carries AAP_ADMIN_PASSWORD
