@@ -1244,3 +1244,206 @@ echo "==> Done. Event Stream URL for Satellite's webhook target-url:"
 echo "$EVENT_STREAM_URL"
 echo "==> SETUP-AAP1: SUCCESS"
 AAPUSER_EOF
+
+# Pre-populate the two scripts Module 4 (Steps 4 and 5) walks the
+# participant through running. Both are fully self-contained and
+# idempotent (same "look it up by name, create if missing" pattern used
+# throughout this file), so they don't depend on any shell variables
+# from earlier steps in the participant's own terminal session - only
+# on resources that already exist by the time each step runs. Writing
+# these here (rather than having the participant paste large heredocs
+# that write intermediate helper files, e.g. a Python payload builder
+# or the rulebook YAML, by hand) removes that copy/paste risk the same
+# way Step 1's Containerfile/find_and_remediate.yml/
+# vulnerability_remediation.py pre-population already does - Module 4
+# only explains what each script does and runs it, it never creates one
+# from scratch in front of the participant.
+cat > /root/create-controller-project.sh <<'CTRLPROJ_EOF'
+#!/bin/bash
+set -e
+export CTRL_API="https://localhost/api/controller/v2"
+export CTRL_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
+
+EE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/execution_environments/?name=Vulnerability%20Finder%20EE" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+echo "EE_ID=$EE_ID"
+
+CRED_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credentials/?name=Satellite%20Admin%20(API)" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+echo "CRED_ID=$CRED_ID"
+
+# Reuse the SAME deploy key from Module 3 as the SCM credential.
+SCM_CRED_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credentials/?name=Self-hosted%20repo%20deploy%20key%20(Controller)" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$SCM_CRED_ID" ]; then
+  SCM_CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credential_types/?name=Source%20Control" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+  DEPLOY_KEY=$(sudo -u aap1-user bash -c 'cat ~/.ssh/eda_project_deploy_key')
+  SCM_CRED_ID=$(DEPLOY_KEY="$DEPLOY_KEY" SCM_CRED_TYPE_ID="$SCM_CRED_TYPE_ID" python3 -c "
+import json, os
+print(json.dumps({
+    'name': 'Self-hosted repo deploy key (Controller)',
+    'organization': 1,
+    'credential_type': int(os.environ['SCM_CRED_TYPE_ID']),
+    'inputs': {'ssh_key_data': os.environ['DEPLOY_KEY']},
+}))
+" | curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credentials/" -H "Content-Type: application/json" -d @- \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+fi
+echo "SCM_CRED_ID=$SCM_CRED_ID"
+
+PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/projects/?name=Vulnerability%20Package%20Finder" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$PROJECT_ID" ]; then
+  PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"Vulnerability Package Finder\", \"organization\": 1, \"scm_type\": \"git\", \"scm_url\": \"ssh://aap1-user@localhost/home/aap1-user/git/vulnerability-remediation.git\", \"credential\": $SCM_CRED_ID}" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+fi
+echo "PROJECT_ID=$PROJECT_ID"
+
+UPDATE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/$PROJECT_ID/update/" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+echo "UPDATE_ID=$UPDATE_ID"
+for i in $(seq 1 30); do
+  STATUS=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/project_updates/$UPDATE_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
+  echo "project update status=$STATUS"
+  [ "$STATUS" = "successful" ] && break
+  sleep 2
+done
+
+# Reuse an existing inventory - our playbook targets localhost for the
+# scan, then dynamically adds the affected host via add_host, so it
+# doesn't matter which inventory is attached.
+INVENTORY_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/inventories/?page_size=1" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+echo "INVENTORY_ID=$INVENTORY_ID"
+
+JT_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/job_templates/?name=Vulnerability%20Package%20Finder%20and%20Remediator" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$JT_ID" ]; then
+  JT_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/job_templates/" \
+    -H "Content-Type: application/json" \
+    -d "{\"name\": \"Vulnerability Package Finder and Remediator\", \"job_type\": \"run\", \"inventory\": $INVENTORY_ID, \"project\": $PROJECT_ID, \"playbook\": \"find_and_remediate.yml\", \"execution_environment\": $EE_ID, \"ask_variables_on_launch\": true}" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+fi
+echo "JT_ID=$JT_ID"
+
+curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/job_templates/$JT_ID/credentials/" \
+  -H "Content-Type: application/json" -d "{\"id\": $CRED_ID}"
+CTRLPROJ_EOF
+chmod +x /root/create-controller-project.sh
+
+cat > /root/wire-rulebook.sh <<'WIRE_RULEBOOK_EOF'
+#!/bin/bash
+set -e
+export EDA_API="https://localhost/api/eda/v1"
+export EDA_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
+mkdir -p /tmp/eda-setup
+
+CTRL_CRED_TYPE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/credential-types/?name=Red%20Hat%20Ansible%20Automation%20Platform" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+CTRL_CRED_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/eda-credentials/?name=AAP%20Controller" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$CTRL_CRED_ID" ]; then
+  CTRL_CRED_TYPE_ID="$CTRL_CRED_TYPE_ID" python3 -c "
+import json, os
+print(json.dumps({
+    'name': 'AAP Controller',
+    'credential_type_id': int(os.environ['CTRL_CRED_TYPE_ID']),
+    'organization_id': 1,
+    'inputs': {
+        'host': 'https://localhost/api/controller/',
+        'username': 'admin',
+        'password': 'bc31c9a6-9ff0-11ec-9587-00155d1b0702',
+        'verify_ssl': False,
+    },
+}))
+" | curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/eda-credentials/" -H "Content-Type: application/json" -d @- \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])" > /tmp/eda-setup/ctrl_cred_id
+  CTRL_CRED_ID=$(cat /tmp/eda-setup/ctrl_cred_id)
+fi
+echo "CTRL_CRED_ID=$CTRL_CRED_ID"
+
+sudo -u aap1-user bash -c '
+cd ~/satellite-webhook
+cat > rulebooks/satellite-webhook.yml <<RULEBOOK_EOF
+---
+- name: Satellite Remote Execution Webhook
+  hosts: all
+  sources:
+    - ansible.eda.webhook:
+        host: 127.0.0.1
+        port: 5000
+      name: satellite_webhook
+  rules:
+    - name: Log Satellite remote execution success
+      condition: true
+      action:
+        debug:
+          msg: "Received Satellite webhook: {{ event }}"
+
+    - name: Find and remediate CVEs on the affected host
+      condition: event.payload.task_result == "success"
+      action:
+        run_job_template:
+          name: "Vulnerability Package Finder and Remediator"
+          organization: "Default"
+          job_args:
+            extra_vars:
+              host_name: "{{ event.payload.host_name }}"
+RULEBOOK_EOF
+git add rulebooks/satellite-webhook.yml
+git commit -m "Launch the vulnerability finder/remediator job template on success" || true
+GIT_SSH_COMMAND="ssh -i ~/.ssh/eda_project_deploy_key -o IdentitiesOnly=yes" git push aap main
+'
+
+PROJECT_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/projects/?name=Satellite%20Webhook%20Rulebooks" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/projects/$PROJECT_ID/sync/" \
+  -H "Content-Type: application/json" -d '{"name": "Satellite Webhook Rulebooks"}' > /dev/null
+
+for i in $(seq 1 20); do
+  STATE=$(curl -sk -u "$EDA_AUTH" "$EDA_API/projects/$PROJECT_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['import_state'])")
+  echo "import_state=$STATE"
+  [ "$STATE" = "completed" ] && break
+  sleep 2
+done
+
+RULEBOOK_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/rulebooks/?project_id=$PROJECT_ID" \
+  | python3 -c "import sys,json; print([r['id'] for r in json.load(sys.stdin)['results'] if r['name']=='satellite-webhook.yml'][0])")
+RULEBOOK_HASH=$(curl -sk -u "$EDA_AUTH" "$EDA_API/rulebooks/$RULEBOOK_ID/" \
+  | python3 -c "import sys,json,hashlib; print(hashlib.sha256(json.load(sys.stdin)['rulesets'].encode()).hexdigest())")
+
+BASIC_CRED_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/eda-credentials/?name=Satellite%20Webhook%20Basic%20Auth" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+EVENT_STREAM_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+DE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/decision-environments/?name=Default%20Decision%20Environment" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+
+ACTIVATION_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+[ -n "$ACTIVATION_ID" ] && curl -sk -u "$EDA_AUTH" -X DELETE "$EDA_API/activations/$ACTIVATION_ID/"
+
+EVENT_STREAM_ID="$EVENT_STREAM_ID" RULEBOOK_HASH="$RULEBOOK_HASH" RULEBOOK_ID="$RULEBOOK_ID" \
+  DE_ID="$DE_ID" BASIC_CRED_ID="$BASIC_CRED_ID" CTRL_CRED_ID="$CTRL_CRED_ID" python3 -c "
+import json, os
+source_mappings = json.dumps([{
+    'source_name': 'satellite_webhook',
+    'event_stream_id': int(os.environ['EVENT_STREAM_ID']),
+    'event_stream_name': 'Satellite Remote Execution Webhook',
+    'rulebook_hash': os.environ['RULEBOOK_HASH'],
+}])
+print(json.dumps({
+    'name': 'Satellite Webhook Activation',
+    'rulebook_id': int(os.environ['RULEBOOK_ID']),
+    'decision_environment_id': int(os.environ['DE_ID']),
+    'organization_id': 1,
+    'eda_credentials': [int(os.environ['BASIC_CRED_ID']), int(os.environ['CTRL_CRED_ID'])],
+    'is_enabled': True,
+    'source_mappings': source_mappings,
+}))
+" | curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/activations/" -H "Content-Type: application/json" -d @-
+WIRE_RULEBOOK_EOF
+chmod +x /root/wire-rulebook.sh
