@@ -551,8 +551,8 @@ Katello content API to find the exact erratum/package that fixes each
 CVE, and - when scoped to one host via `--host` - narrows that down to
 exactly the packages that host needs. The full script is tracked in
 this repo at `runtime-automation/module-04/vulnerability_remediation.py`,
-and pre-populated onto `aap1.lab` by `setup-automation/setup-aap1.sh`
-during provisioning (see step 1 below).
+and pre-populated onto `aap1.lab` by
+`runtime-automation/module-04/setup-aap1.sh` (see step 1 below).
 
 ```mermaid
 sequenceDiagram
@@ -571,9 +571,11 @@ sequenceDiagram
 
 Unlike Parts A-C (which you build by hand), this repo (`Containerfile`,
 `find_and_remediate.yml`, `vulnerability_remediation.py`) was already
-self-hosted on `aap1.lab` by `setup-automation/setup-aap1.sh` during
-provisioning - the same idempotent script that set up Part A. Reusing
-the same deploy key, at `~/vulnerability-remediation` (bare repo at
+self-hosted on `aap1.lab` by `runtime-automation/module-04/setup-aap1.sh`
+- an idempotent script that runs the same way
+`runtime-automation/module-03/setup-aap1.sh` set up Part A, just scoped
+to Module 4's own resources. Reusing the same deploy key, at
+`~/vulnerability-remediation` (bare repo at
 `~/git/vulnerability-remediation.git`). This avoids hand-copying an
 ~800-line script.
 
@@ -583,9 +585,10 @@ Verify it's there instead of creating it:
 sudo -u aap1-user bash -c 'ls -la ~/vulnerability-remediation'
 ```
 
-See `setup-automation/setup-aap1.sh`'s step 8 in this repo for the exact
-content of all three files, or `runtime-automation/module-04/vulnerability_remediation.py`
-for the script standalone.
+See `runtime-automation/module-04/setup-aap1.sh` in this repo for the
+exact content of all three files, or
+`runtime-automation/module-04/vulnerability_remediation.py` for the
+script standalone.
 
 ### 2. Build the custom Execution Environment
 

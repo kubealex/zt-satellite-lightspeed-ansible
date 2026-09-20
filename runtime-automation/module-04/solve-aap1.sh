@@ -11,10 +11,10 @@ echo "Solving module-04" >> /tmp/progress.log
 # (satellite.lab has its own real work: creating the webhook template
 # and webhook).
 #
-# root's podman was already logged into registry.redhat.io by
-# setup-automation/setup-aap1.sh during provisioning, so the base image
-# in Containerfile can be pulled here without any credentials of its
-# own. vulnerability_remediation.py itself (a custom script that queries
+# root's podman was already logged into registry.redhat.io by this
+# module's own setup-aap1.sh, so the base image in Containerfile can be
+# pulled here without any credentials of its own.
+# vulnerability_remediation.py itself (a custom script that queries
 # Satellite's on-premises Red Hat Lightspeed Vulnerability service for
 # CVEs and cross-references its Katello errata API for fixes) was also
 # already pre-populated by that same setup script.
@@ -22,8 +22,8 @@ set -e
 
 # The vulnerability-remediation repo (Containerfile, find_and_remediate.yml,
 # vulnerability_remediation.py) was already self-hosted on aap1.lab by
-# setup-automation/setup-aap1.sh during provisioning - just verify it is
-# there rather than re-creating it.
+# runtime-automation/module-04/setup-aap1.sh - just verify it is there
+# rather than re-creating it.
 sudo -u aap1-user test -f /home/aap1-user/vulnerability-remediation/vulnerability_remediation.py
 
 # Build + push the custom EE (assumes registry.redhat.io login already done)
@@ -56,7 +56,7 @@ fi
 
 # Steps 4 and 5 of module-04.adoc (Controller Project/Job Template, EDA
 # Controller credential, rulebook update, Activation recreation) are
-# exactly what these two scripts do - setup-automation/setup-aap1.sh
+# exactly what these two scripts do - this module's own setup-aap1.sh
 # already pre-populated them as /root/*.sh (self-contained and
 # idempotent), so re-run them here too rather than duplicating ~150
 # lines of the same curl/python3 logic a second time in this file.
