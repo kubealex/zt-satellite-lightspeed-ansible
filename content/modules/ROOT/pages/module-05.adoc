@@ -3,10 +3,12 @@
 == Verify the Closed Loop
 
 Module 4 wired everything together: a successful Satellite webhook now
-launches an AAP Job Template that finds and remediates CVEs on the
-affected host, with zero manual intervention. This module proves it -
-you'll trigger the pipeline for real and watch the vulnerable packages
-on `rhel1.lab` get fixed automatically.
+launches an AAP Job Template that finds and remediates Critical- and
+Important-severity CVEs across *every* affected host, with zero manual
+intervention. This module proves it - you'll trigger the pipeline for
+real (with a job on `rhel1.lab`) and watch the vulnerable packages get
+fixed automatically on *both* `rhel1.lab` and `rhel2.lab`, even though
+only one host fired the webhook.
 
 ======
 First, let's check the current (vulnerable) package versions.
@@ -14,18 +16,25 @@ First, let's check the current (vulnerable) package versions.
 .Step 1 - Check the current (vulnerable) package versions
 [%collapsible]
 =====
-Click on the tab labelled `rhel1.lab terminal`, then check the versions
-of the packages that were deliberately left vulnerable during lab
-setup:
+Check the versions of the packages that were deliberately left
+vulnerable during lab setup. Because the remediation is fleet-wide,
+check *both* hosts. On the `rhel1.lab terminal` tab:
 
 [source,bash,role="execute"]
 ----
 rpm -q openssl openssl-libs libvpx gnutls tar
 ----
 
-You should see the deliberately-old versions seeded during lab setup
-(e.g. `openssl-3.5.1-4.el10_1`). Keep this output around to compare
-against later.
+Then do the same on the `rhel2.lab terminal` tab:
+
+[source,bash,role="execute"]
+----
+rpm -q openssl openssl-libs libvpx gnutls tar
+----
+
+You should see the deliberately-old versions seeded during lab setup on
+both hosts (e.g. `openssl-3.5.1-4.el10_1`). Keep this output around to
+compare against later.
 =====
 ======
 
@@ -83,11 +92,12 @@ curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/$JOB_ID/stdout/?format=txt" | tail -60
 [TIP]
 ====
 If the job status shows `failed`, the `stdout` output above is the
-first place to look - most failures at this point are either the
-Satellite API credential/URL, the Execution Environment not having
-`uv` (double-check Module 4 Step 2's build succeeded), or
-`vulnerability_remediation.py` not being present in the repo (Module 4
-Step 1).
+first place to look. Common causes: the Satellite API credential/URL
+(Module 4 Step 2), the Execution Environment not having `uv` (it was
+pre-built during lab setup - see Module 4 Step 1), `vulnerability_remediation.py`
+not being present in the repo (Module 4 Step 1), or - if the *scan* plays
+succeed but the *install* play fails with `Permission denied (publickey)`
+- the Machine credential missing from the Job Template (Module 4 Step 3).
 ====
 =====
 ======
@@ -98,17 +108,37 @@ Finally, let's confirm the packages were actually remediated.
 .Step 4 - Confirm the packages were actually remediated
 [%collapsible]
 =====
-Back on `rhel1.lab terminal`, check the same packages from Step 1:
+Check the same packages from Step 1 on *both* hosts. On the
+`rhel1.lab terminal` tab:
 
 [source,bash,role="execute"]
 ----
 rpm -q openssl openssl-libs libvpx gnutls tar
 ----
 
-If the versions changed from what you saw in Step 1, congratulations -
-the entire loop is closed: Satellite fired a webhook, EDA validated and
-routed it, AAP launched a job that found the applicable CVEs via Red
-Hat Lightspeed, and Ansible installed the exact packages needed to fix
-them, with zero manual intervention.
+And on the `rhel2.lab terminal` tab:
+
+[source,bash,role="execute"]
+----
+rpm -q openssl openssl-libs libvpx gnutls tar
+----
+
+If the versions changed from what you saw in Step 1 on *both* hosts,
+congratulations - the entire loop is closed: Satellite fired a webhook
+(for a job on `rhel1.lab` only), EDA validated and routed it, AAP
+launched a single job that found the applicable Critical/Important CVEs
+across the fleet via Red Hat Lightspeed, and Ansible installed the exact
+packages needed to fix them on *every* affected host - including
+`rhel2.lab`, which never fired a webhook of its own - with zero manual
+intervention.
+
+[NOTE]
+====
+In the job's `PLAY RECAP` (Step 3) you'll see one line per affected host.
+A host that was already up to date shows `skipped` (nothing to install);
+a host that needed patches shows `changed`. That's the fleet-wide sweep
+in action - each host is remediated with exactly its own package set,
+independent of which host triggered the run.
+====
 =====
 ======
