@@ -76,7 +76,7 @@ virtualmachines:
     image: "aap1-092126"
     bootloader: efi
     register_satellite: false
-    memory: "16G"
+    memory: "32G"
     cores: 8
     image_size: "200Gi"
     tags:
