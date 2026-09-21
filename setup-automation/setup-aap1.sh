@@ -13,6 +13,16 @@
 # See docs/EDA_WEBHOOK_SETUP.md for the full manual/CLI walkthrough this
 # script automates, including troubleshooting notes.
 
+systemctl stop dnf-automatic-install.timer
+systemctl disable dnf-automatic-install.timer
+systemctl mask dnf-automatic-install.timer
+
+systemctl stop dnf-automatic.timer
+systemctl disable dnf-automatic.timer
+
+sed -i 's/^apply_updates.*/apply_updates = no/' /etc/dnf/automatic.conf
+sed -i 's/^download_updates.*/download_updates = no/' /etc/dnf/automatic.conf
+
 # TODO: set this to the actual AAP application admin password for this
 # lab's aap1 image (NOT the aap1-user OS account password).
 AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
