@@ -1355,19 +1355,26 @@ fi
 echo "SCM_CRED_ID=$SCM_CRED_ID"
 
 # Controller's Project sync runs inside an isolated Execution
-# Environment container. Both "localhost" and "aap1.lab" resolve to
-# loopback there (aap1.lab is a static /etc/hosts loopback alias on
-# this host, confirmed via 'getent hosts aap1.lab' -> ::1), which is
-# the container's OWN loopback, not the actual aap1.lab host - so
-# ssh://aap1-user@localhost/... and
-# ssh://aap1-user@aap1.lab/... both fail identically with "connect to
-# host ... port 22: Connection refused" (nothing listens on port 22
-# inside that container). The EDA Project earlier in this file
-# legitimately uses "localhost" because EDA's own Project sync does not
-# run inside such a container. Use the host's actual global-scope IP
-# instead, determined fresh here rather than hardcoded, since it can
-# differ between environments.
-AAP1_REAL_IP=$(ip -4 addr show scope global | grep inet | head -1 | awk '{print $2}' | cut -d/ -f1)
+# Environment container on podman's own bridge network, not host
+# networking. "localhost" and "aap1.lab" both resolve to loopback
+# there (aap1.lab is a static /etc/hosts loopback alias on this host,
+# confirmed via 'getent hosts aap1.lab' -> ::1) - that is the
+# container's OWN loopback, not the host's, so both fail identically
+# with "connect to host ... port 22: Connection refused". The host's
+# own real, outward-facing IP (e.g. from 'ip -4 addr show scope
+# global') does not work either - confirmed live it fails with
+# "Network is unreachable", since that address lives on a completely
+# different network layer than podman's bridge (this host's own
+# "real" address is itself a masqueraded VM address on a
+# virtualization platform, one layer removed from podman's bridge
+# network here). What actually works, confirmed live, is podman's
+# default bridge gateway IP: sshd listens on 0.0.0.0 (all interfaces,
+# confirmed via 'ss -tlnp'), and podman's bridge network routes
+# through the host for any service listening on all interfaces, so
+# that gateway IP reaches it correctly. The EDA Project earlier in
+# this file legitimately uses "localhost" because EDA's own Project
+# sync does not run inside such a container.
+AAP1_REAL_IP=$(podman network inspect podman 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['subnets'][0]['gateway'])")
 PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/projects/?name=Vulnerability%20Package%20Finder" \
   | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
 if [ -z "$PROJECT_ID" ]; then

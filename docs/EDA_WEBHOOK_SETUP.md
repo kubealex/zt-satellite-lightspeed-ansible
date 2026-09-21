@@ -663,15 +663,21 @@ print(json.dumps({'name': 'Self-hosted repo deploy key (Controller)', 'organizat
   | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 
 # Controller's Project sync runs inside an isolated Execution
-# Environment container, where both "localhost" and "aap1.lab" resolve
-# to that container's own loopback (aap1.lab is a static /etc/hosts
-# loopback alias on this host), not the actual aap1.lab host - so
-# either one fails with "connect to host ... port 22: Connection
-# refused" here (the EDA Project above legitimately uses "localhost"
-# because its sync does not run inside such a container). Use the
-# host's actual global-scope IP instead, determined fresh rather than
-# hardcoded, since it can differ between environments.
-AAP1_REAL_IP=$(ip -4 addr show scope global | grep inet | head -1 | awk '{print $2}' | cut -d/ -f1)
+# Environment container on podman's own bridge network, not host
+# networking. "localhost" and "aap1.lab" both resolve to that
+# container's own loopback (aap1.lab is a static /etc/hosts loopback
+# alias on this host) - not the host's - so both fail identically with
+# "connect to host ... port 22: Connection refused" (the EDA Project
+# above legitimately uses "localhost" because its sync does not run
+# inside such a container). The host's own real, outward-facing IP
+# does not work either ("Network is unreachable" - that address lives
+# on a different network layer, since this host is itself a
+# masqueraded VM on a virtualization platform, one layer removed from
+# podman's bridge network here). What works is podman's default bridge
+# gateway IP: sshd listens on 0.0.0.0 (all interfaces), and podman's
+# bridge routes through the host for any service listening on all
+# interfaces.
+AAP1_REAL_IP=$(podman network inspect podman 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['subnets'][0]['gateway'])")
 PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/" \
   -H "Content-Type: application/json" \
   -d "{\"name\": \"Vulnerability Package Finder\", \"organization\": 1, \"scm_type\": \"git\",
