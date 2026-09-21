@@ -10,6 +10,12 @@ real (with a job on `rhel1.lab`) and watch the vulnerable packages get
 fixed automatically on *both* `rhel1.lab` and `rhel2.lab`, even though
 only one host fired the webhook.
 
+Both managed hosts - `rhel1.lab` and `rhel2.lab` - are registered to
+Satellite and reporting in:
+
+.Managed hosts in Satellite
+image::hosts-registered.png[Satellite Hosts list showing rhel1.lab and rhel2.lab]
+
 ======
 First, let's check the current (vulnerable) package versions.
 
@@ -35,6 +41,15 @@ rpm -q openssl openssl-libs libvpx gnutls tar
 You should see the deliberately-old versions seeded during lab setup on
 both hosts (e.g. `openssl-3.5.1-4.el10_1`). Keep this output around to
 compare against later.
+
+Satellite's own Vulnerability dashboard corroborates this. Under
+*Red Hat Lightspeed -> Vulnerability*, both hosts show up as affected by
+an *Important*-severity OpenSSL flaw (`CVE-2025-15467`, CVSS 9.8), with
+*Systems Affected = 2*. This is exactly the kind of Critical/Important
+CVE this lab auto-remediates:
+
+.Vulnerability dashboard before remediation - one Important CVE affecting both hosts
+image::vulnerabilities-before-remediation.png[Vulnerability dashboard showing one Important-severity CVE affecting two systems]
 =====
 ======
 
@@ -56,6 +71,14 @@ hammer job-invocation create \
   --search-query "name = rhel1.lab" \
   --inputs "command=echo trigger-remediation"
 ----
+
+In the Satellite Web UI (*Monitor -> Jobs*), this job shows as succeeded
+against `rhel1.lab`. That *successful remote-execution job* is the event
+that fires the webhook into AAP - and, from here on, the whole loop runs
+on its own:
+
+.Satellite remote-execution job succeeded on rhel1.lab
+image::satellite-remediation-job-success.png[Satellite job invocation detail page showing the Run Command job succeeded on rhel1.lab]
 =====
 ======
 
@@ -131,6 +154,24 @@ across the fleet via Red Hat Lightspeed, and Ansible installed the exact
 packages needed to fix them on *every* affected host - including
 `rhel2.lab`, which never fired a webhook of its own - with zero manual
 intervention.
+
+Back in Satellite's *Red Hat Lightspeed -> Vulnerability* dashboard, the
+Important-severity CVE from Step 1 is gone: *CVEs with critical severity*
+and *CVEs with important severity* both read *0*, and the OpenSSL CVE that
+previously affected two systems no longer appears in the list.
+
+.Vulnerability dashboard after remediation - no Critical or Important CVEs remain
+image::vulnerabilities-after-remediation.png[Vulnerability dashboard showing zero Critical and zero Important CVEs after remediation]
+
+[NOTE]
+====
+The Vulnerability dashboard only reflects the fix once each host
+re-reports its package inventory to Satellite. `insights-client` does this
+on a schedule, so there can be a short delay between the AAP job finishing
+and the dashboard clearing; you can force an immediate refresh by running
+`insights-client` on each host. The `rpm -q` output above, by contrast,
+changes the moment the AAP job completes.
+====
 
 [NOTE]
 ====
