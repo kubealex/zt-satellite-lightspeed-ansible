@@ -45,6 +45,22 @@ AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 # Also set REGISTRY_AUTH_FILE in /root/.bashrc as a second, explicit
 # guarantee that works even if some other login shell's $XDG_RUNTIME_DIR
 # happens to be set and would otherwise take precedence.
+# Declare aap1.lab itself as an insecure registry (HTTPS with
+# certificate verification skipped) in registries.conf.d, rather than
+# relying solely on the one-off `podman push/build --tls-verify=false`
+# CLI flag. Without this, some internal podman operations (e.g. the
+# cross-repository blob-reuse ping that happens on push) don't reliably
+# honor that per-command flag and fall back to plain HTTP on port 80
+# instead, which nothing listens on ("connect: connection refused"),
+# even though the actual registry (served over HTTPS on 443 by envoy)
+# works fine.
+mkdir -p /etc/containers/registries.conf.d
+cat > /etc/containers/registries.conf.d/aap1-insecure.conf <<'EOF'
+[[registry]]
+location = "aap1.lab"
+insecure = true
+EOF
+
 if [ -n "${REGISTRY_PULL_TOKEN:-}" ]; then
   mkdir -p /root/.config/containers
   cat > /root/.config/containers/auth.json <<EOF
