@@ -207,6 +207,11 @@ You should see a line like:
 Received Satellite webhook: {'payload': {'host_name': 'rhel1.lab', 'task_result': 'success', ...}, 'meta': {...}}
 ----
 
+Here's an example of the output you should see on the `aap1.lab` terminal:
+
+.Webhook output on `aap1.lab` terminal
+image::webhook-metadata-received.png[]
+
 If you see that line with the current timestamp, congratulations - the
 Satellite-to-AAP EDA webhook pipeline is fully wired up end to end.
 
