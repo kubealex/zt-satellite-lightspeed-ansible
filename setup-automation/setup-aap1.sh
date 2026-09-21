@@ -1279,7 +1279,35 @@ echo "$EVENT_STREAM_URL"
 echo "==> SETUP-AAP1: SUCCESS"
 AAPUSER_EOF
 
-# Pre-populate the two scripts Module 4 (Steps 4 and 5) walks the
+# Building and registering a custom Execution Environment is a routine
+# AAP administration task, not something this lab is trying to teach,
+# so it happens here during setup instead of as a participant step in
+# Module 4. The aap1-* golden image normally already has
+# aap1.lab/ee-vuln-finder:latest built and cached in local podman
+# storage (baked in ahead of time), so the build step below is only a
+# fallback for an older image that predates that, skipped entirely
+# when the image is already present.
+cd /home/aap1-user/vulnerability-remediation
+if ! podman image exists aap1.lab/ee-vuln-finder:latest; then
+  podman build -t ee-vuln-finder -f Containerfile .
+  podman tag ee-vuln-finder:latest aap1.lab/ee-vuln-finder:latest
+fi
+podman login --tls-verify=false -u admin -p "$AAP_ADMIN_PASSWORD" aap1.lab
+podman push --tls-verify=false aap1.lab/ee-vuln-finder:latest
+
+export CTRL_API="https://localhost/api/controller/v2"
+export CTRL_AUTH="admin:$AAP_ADMIN_PASSWORD"
+EE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/execution_environments/?name=Vulnerability%20Finder%20EE" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$EE_ID" ]; then
+  EE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/execution_environments/" \
+    -H "Content-Type: application/json" \
+    -d '{"name": "Vulnerability Finder EE", "image": "aap1.lab/ee-vuln-finder:latest", "pull": "missing"}' \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+fi
+echo "EE_ID=$EE_ID"
+
+# Pre-populate the two scripts Module 4 (Steps 3 and 4) walks the
 # participant through running. Both are fully self-contained and
 # idempotent (same "look it up by name, create if missing" pattern used
 # throughout this file), so they don't depend on any shell variables

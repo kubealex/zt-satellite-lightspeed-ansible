@@ -587,28 +587,25 @@ See `setup-automation/setup-aap1.sh`'s step 8 in this repo for the exact
 content of all three files, or `runtime-automation/module-04/vulnerability_remediation.py`
 for the script standalone.
 
-### 2. Build the custom Execution Environment
+### 2. The custom Execution Environment is already built and registered
 
 `vulnerability_remediation.py` needs `uv` on its `$PATH`, which AAP's
-stock EEs don't ship:
+stock EEs don't ship, that's what `Containerfile` adds. Building and
+registering a custom Execution Environment is a routine AAP
+administration task, not something worth walking through by hand here,
+so `setup-automation/setup-aap1.sh` already did it during provisioning:
 
 ```bash
-podman login registry.redhat.io --username "<your-redhat-registry-username>" --password "$REGISTRY_PULL_TOKEN"
-
 cd ~/vulnerability-remediation
-podman build -t ee-vuln-finder -f Containerfile .
-podman tag ee-vuln-finder:latest aap1.lab/ee-vuln-finder:latest
+if ! podman image exists aap1.lab/ee-vuln-finder:latest; then
+  podman build -t ee-vuln-finder -f Containerfile .
+  podman tag ee-vuln-finder:latest aap1.lab/ee-vuln-finder:latest
+fi
 podman login --tls-verify=false -u admin -p "$AAP_ADMIN_PASSWORD" aap1.lab
 podman push --tls-verify=false aap1.lab/ee-vuln-finder:latest
-```
 
-Then register it in Controller (`https://localhost/api/controller/v2/`,
-same `ensure_id`-style check-first pattern as Part A):
-
-```bash
 export CTRL_API="https://localhost/api/controller/v2"
 export CTRL_AUTH="admin:$AAP_ADMIN_PASSWORD"
-
 EE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/execution_environments/?name=Vulnerability%20Finder%20EE" \
   | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
 if [ -z "$EE_ID" ]; then
@@ -618,6 +615,11 @@ if [ -z "$EE_ID" ]; then
     | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 fi
 ```
+
+The `podman build`/`tag` lines are only a fallback: the `aap1-*` golden
+image normally already has `aap1.lab/ee-vuln-finder:latest` built and
+cached in local podman storage, baked in ahead of time, so that check
+usually skips straight to the push/register.
 
 ### 3. Create the Satellite API credential (Controller)
 

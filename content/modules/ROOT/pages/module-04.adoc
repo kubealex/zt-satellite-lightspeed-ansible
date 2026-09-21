@@ -37,6 +37,15 @@ straight to Ansible's `dnf` module.
 vulnerable packages installed (seeded during lab setup) so you have
 real CVEs to remediate.
 
+[NOTE]
+====
+Building and registering a custom Execution Environment is a routine
+AAP administration task, and this lab is not about teaching AAP
+configuration itself. That work was already done for you during lab
+setup, so this module focuses on Satellite's CVE data and Ansible's
+remediation logic instead.
+====
+
 ======
 First, let's review the pre-populated finder and remediation files.
 
@@ -69,16 +78,16 @@ You should see three files. Here's why each one exists:
   that down to exactly the packages one host needs.
 
 | `find_and_remediate.yml`
-| The Ansible playbook the Job Template (Step 4) actually runs. It calls
+| The Ansible playbook the Job Template (Step 3) actually runs. It calls
   `vulnerability_remediation.py` scoped to the host that triggered the
   webhook, then installs whatever packages the report returns via
   `ansible.builtin.dnf`.
 
 | `Containerfile`
-| Defines the custom Execution Environment built in Step 2.
-  `vulnerability_remediation.py` needs `uv` on its `$PATH` (its
-  `#!/usr/bin/env -S uv run --script` shebang), which AAP's stock
-  Execution Environments don't ship.
+| Defines the custom Execution Environment that was already built and
+  registered with Controller during lab setup. `vulnerability_remediation.py`
+  needs `uv` on its `$PATH` (its `#!/usr/bin/env -S uv run --script`
+  shebang), which AAP's stock Execution Environments don't ship.
 |===
 
 Take a look at the playbook to see exactly how the scan result feeds
@@ -92,56 +101,9 @@ sudo -u aap1-user bash -c 'cat ~/vulnerability-remediation/find_and_remediate.ym
 ======
 
 ======
-Next, we'll build the custom Execution Environment these files need.
-
-.Step 2 - Build the custom Execution Environment
-[%collapsible]
-=====
-`vulnerability_remediation.py` needs `uv` on its `$PATH`, which AAP's
-stock Execution Environments don't ship - that's what the `Containerfile`
-from Step 1 adds. Build and push it to AAP's own Hub registry, then
-register it with Controller.
-
-Still on the `aap1.lab terminal` tab, as root. Root's `podman` was
-already logged into `registry.redhat.io` for you during provisioning,
-so the base image in `Containerfile` can be pulled without any
-credentials of your own:
-
-[source,bash,role="execute"]
-----
-cd /home/aap1-user/vulnerability-remediation
-podman build -t ee-vuln-finder -f Containerfile .
-podman tag ee-vuln-finder:latest aap1.lab/ee-vuln-finder:latest
-
-podman login --tls-verify=false -u admin -p "bc31c9a6-9ff0-11ec-9587-00155d1b0702" aap1.lab
-podman push --tls-verify=false aap1.lab/ee-vuln-finder:latest
-----
-
-Now register it as an Execution Environment in Controller:
-
-[source,bash,role="execute"]
-----
-export CTRL_API="https://localhost/api/controller/v2"
-export CTRL_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
-
-EE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/execution_environments/?name=Vulnerability%20Finder%20EE" \
-  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
-
-if [ -z "$EE_ID" ]; then
-  EE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/execution_environments/" \
-    -H "Content-Type: application/json" \
-    -d '{"name": "Vulnerability Finder EE", "image": "aap1.lab/ee-vuln-finder:latest", "pull": "missing"}' \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-fi
-echo "EE_ID=$EE_ID"
-----
-=====
-======
-
-======
 Now let's create the Satellite API credential the playbook will use.
 
-.Step 3 - Create the Satellite API credential
+.Step 2 - Create the Satellite API credential
 [%collapsible]
 =====
 The playbook needs Satellite admin credentials, but the rulebook
@@ -195,7 +157,7 @@ echo "CRED_ID=$CRED_ID"
 ======
 Then we'll create the Controller Project and Job Template.
 
-.Step 4 - Create the Controller Project and Job Template
+.Step 3 - Create the Controller Project and Job Template
 [%collapsible]
 =====
 Rather than pasting that logic by hand, it was already written to
@@ -207,8 +169,9 @@ the following, in order:
 * Creates a Controller Project pointing at that repo, then waits for
   it to finish syncing.
 * Creates the Job Template that runs `find_and_remediate.yml`, using
-  the custom Execution Environment from Step 2.
-* Attaches the Satellite credential from Step 3 to the Job Template,
+  the custom Execution Environment already registered during lab
+  setup.
+* Attaches the Satellite credential from Step 2 to the Job Template,
   so it can authenticate without the rulebook ever needing to know the
   password.
 
@@ -223,7 +186,7 @@ Still as root on the `aap1.lab terminal` tab, run it:
 ====
 `ask_variables_on_launch: true` is required - it's what allows the EDA
 rulebook to pass `host_name` as an extra var when it launches this job
-template in Step 5. Without it, Controller ignores any extra vars
+template in Step 4. Without it, Controller ignores any extra vars
 supplied at launch time.
 ====
 =====
@@ -232,7 +195,7 @@ supplied at launch time.
 ======
 Finally, let's wire the rulebook to actually launch that Job Template.
 
-.Step 5 - Wire the rulebook to launch the Job Template
+.Step 4 - Wire the rulebook to launch the Job Template
 [%collapsible]
 =====
 All of that was already written to `/root/wire-rulebook.sh` during lab
