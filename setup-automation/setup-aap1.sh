@@ -1538,6 +1538,11 @@ print(json.dumps({
 fi
 echo "CTRL_CRED_ID=$CTRL_CRED_ID"
 
+# CAUTION: the block below is one big single-quoted "bash -c" string, and it is
+# emitted verbatim into /root/wire-rulebook.sh by the quoted heredoc above. Do
+# not use an apostrophe anywhere inside it - not even in a comment - or it will
+# close the quote early and the rest of the block will be parsed as stray
+# commands (symptom: "drools: line N" errors and an unterminated RULEBOOK_EOF).
 sudo -u aap1-user bash -c '
 cd ~/satellite-webhook
 cat > rulebooks/satellite-webhook.yml <<RULEBOOK_EOF
@@ -1551,7 +1556,7 @@ cat > rulebooks/satellite-webhook.yml <<RULEBOOK_EOF
       name: satellite_webhook
   rules:
     # NOTE: this is deliberately ONE rule with TWO actions, not two rules.
-    # ansible-rulebook's drools engine fires at most ONE rule per event
+    # The ansible-rulebook drools engine fires at most ONE rule per event
     # (first matching rule wins, then the event is consumed), so a separate
     # catch-all "condition: true" logging rule listed first would swallow
     # every event and the remediation rule below it would never fire. Running
