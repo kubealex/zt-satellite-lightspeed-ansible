@@ -1354,20 +1354,26 @@ print(json.dumps({
 fi
 echo "SCM_CRED_ID=$SCM_CRED_ID"
 
-# Note the "aap1.lab" hostname below, not "localhost". Controller's
-# Project sync runs inside an isolated Execution Environment container,
-# where "localhost" refers to that container's own loopback, not the
-# actual aap1.lab host, so an SSH URL of ssh://aap1-user@localhost/...
-# fails with "connect to host localhost port 22: Connection refused"
-# (nothing listens on port 22 inside that container). The EDA Project
-# in this same file legitimately uses "localhost" because EDA's own
-# Project sync does not run inside such a container.
+# Controller's Project sync runs inside an isolated Execution
+# Environment container. Both "localhost" and "aap1.lab" resolve to
+# loopback there (aap1.lab is a static /etc/hosts loopback alias on
+# this host, confirmed via 'getent hosts aap1.lab' -> ::1), which is
+# the container's OWN loopback, not the actual aap1.lab host - so
+# ssh://aap1-user@localhost/... and
+# ssh://aap1-user@aap1.lab/... both fail identically with "connect to
+# host ... port 22: Connection refused" (nothing listens on port 22
+# inside that container). The EDA Project earlier in this file
+# legitimately uses "localhost" because EDA's own Project sync does not
+# run inside such a container. Use the host's actual global-scope IP
+# instead, determined fresh here rather than hardcoded, since it can
+# differ between environments.
+AAP1_REAL_IP=$(ip -4 addr show scope global | grep inet | head -1 | awk '{print $2}' | cut -d/ -f1)
 PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/projects/?name=Vulnerability%20Package%20Finder" \
   | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
 if [ -z "$PROJECT_ID" ]; then
   PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/" \
     -H "Content-Type: application/json" \
-    -d "{\"name\": \"Vulnerability Package Finder\", \"organization\": 1, \"scm_type\": \"git\", \"scm_url\": \"ssh://aap1-user@aap1.lab/home/aap1-user/git/vulnerability-remediation.git\", \"credential\": $SCM_CRED_ID}" \
+    -d "{\"name\": \"Vulnerability Package Finder\", \"organization\": 1, \"scm_type\": \"git\", \"scm_url\": \"ssh://aap1-user@$AAP1_REAL_IP/home/aap1-user/git/vulnerability-remediation.git\", \"credential\": $SCM_CRED_ID}" \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
 fi
 echo "PROJECT_ID=$PROJECT_ID"
