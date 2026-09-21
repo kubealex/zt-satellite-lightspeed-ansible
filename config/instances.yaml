@@ -76,9 +76,9 @@ virtualmachines:
     image: "aap1-091726-2"
     bootloader: efi
     register_satellite: false
-    memory: "32G"
+    memory: "16G"
     cores: 8
-    image_size: "540Gi"
+    image_size: "200Gi"
     tags:
       - key: "AnsibleGroup"
         value: "nodes"
