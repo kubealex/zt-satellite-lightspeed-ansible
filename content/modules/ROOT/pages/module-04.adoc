@@ -78,10 +78,12 @@ You should see three files. Here's why each one exists:
   that down to exactly the packages one host needs.
 
 | `find_and_remediate.yml`
-| The Ansible playbook the Job Template (Step 3) actually runs. It calls
-  `vulnerability_remediation.py` scoped to the host that triggered the
-  webhook, then installs whatever packages the report returns via
-  `ansible.builtin.dnf`.
+| The Ansible playbook the Job Template (Step 3) actually runs. A webhook
+  from any single host triggers it, but it deliberately remediates *every*
+  affected host: it runs `vulnerability_remediation.py` once unscoped to
+  discover which hosts have an installable remediation, re-runs it per host
+  (`--host`) to get exactly the packages each one needs, then installs them
+  on every affected host via `ansible.builtin.dnf`.
 
 | `Containerfile`
 | Defines the custom Execution Environment that was already built and
