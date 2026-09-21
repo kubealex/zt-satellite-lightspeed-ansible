@@ -1531,7 +1531,23 @@ DE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/decision-environments/?name=Default%20
 
 ACTIVATION_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" \
   | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
-[ -n "$ACTIVATION_ID" ] && curl -sk -u "$EDA_AUTH" -X DELETE "$EDA_API/activations/$ACTIVATION_ID/"
+if [ -n "$ACTIVATION_ID" ]; then
+  # EDA activation deletion is asynchronous: the DELETE returns immediately
+  # while the running pod is torn down in the background. Disable it first
+  # to speed teardown, then wait until it is actually gone before creating
+  # the replacement - otherwise the POST below races the delete and fails
+  # with "activation with this name already exists".
+  curl -sk -u "$EDA_AUTH" -X POST "$EDA_API/activations/$ACTIVATION_ID/disable/" \
+    -H "Content-Type: application/json" -d '{}' > /dev/null 2>&1 || true
+  curl -sk -u "$EDA_AUTH" -X DELETE "$EDA_API/activations/$ACTIVATION_ID/" > /dev/null
+  for i in $(seq 1 60); do
+    STILL=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" \
+      | python3 -c "import sys,json; print(len(json.load(sys.stdin)['results']))")
+    [ "$STILL" = "0" ] && break
+    echo "waiting for old activation to be deleted..."
+    sleep 2
+  done
+fi
 
 EVENT_STREAM_ID="$EVENT_STREAM_ID" RULEBOOK_HASH="$RULEBOOK_HASH" RULEBOOK_ID="$RULEBOOK_ID" \
   DE_ID="$DE_ID" BASIC_CRED_ID="$BASIC_CRED_ID" CTRL_CRED_ID="$CTRL_CRED_ID" python3 -c "
