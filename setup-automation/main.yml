@@ -19,6 +19,7 @@
       ansible_ssh_pass: "{{ lookup('ansible.builtin.env', 'BASTION_PASSWORD') }}"
       ansible_python_interpreter: /usr/libexec/platform-python
     loop:
+      - aap1
       - rhel1
       - rhel2
 
@@ -30,6 +31,7 @@
     _showroom_env_domain: "{{ lookup('ansible.builtin.env', 'DOMAIN') | default('') }}"
     _showroom_env_litellm_url: "{{ lookup('ansible.builtin.env', 'LITELLM_API_URL') | default('') }}"
     _showroom_env_litellm_key: "{{ lookup('ansible.builtin.env', 'LITELLM_API_KEY') | default('') }}"
+    _showroom_env_registry_pull_token: "{{ lookup('ansible.builtin.env', 'REGISTRY_PULL_TOKEN') | default('') }}"
   tasks:
     - ansible.builtin.wait_for_connection:
 
@@ -79,6 +81,7 @@
         DOMAIN: "{{ _showroom_env_domain }}"
         LITELLM_API_URL: "{{ _showroom_env_litellm_url }}"
         LITELLM_API_KEY: "{{ _showroom_env_litellm_key }}"
+        REGISTRY_PULL_TOKEN: "{{ _showroom_env_registry_pull_token }}"
       register: r_result
 
     - name: Output script result

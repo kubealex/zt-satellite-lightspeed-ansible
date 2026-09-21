@@ -198,18 +198,21 @@ Then we'll create the Controller Project and Job Template.
 .Step 4 - Create the Controller Project and Job Template
 [%collapsible]
 =====
-This step reuses Module 3's deploy key as the SCM credential, creates a
-Project pointing at the self-hosted `vulnerability-remediation` repo,
-waits for it to sync, then creates the Job Template and attaches the
-Satellite credential from Step 3 to it. Rather than pasting that logic
-by hand, it was already written to `/root/create-controller-project.sh`
-during lab setup - take a look, then run it, still as root on
-`aap1.lab terminal`:
+Rather than pasting that logic by hand, it was already written to
+`/root/create-controller-project.sh` during lab setup. Running it does
+the following, in order:
 
-[source,bash,role="execute"]
-----
-cat /root/create-controller-project.sh
-----
+* Reuses Module 3's deploy key as the SCM credential, so Controller
+  can pull the self-hosted `vulnerability-remediation` repo.
+* Creates a Controller Project pointing at that repo, then waits for
+  it to finish syncing.
+* Creates the Job Template that runs `find_and_remediate.yml`, using
+  the custom Execution Environment from Step 2.
+* Attaches the Satellite credential from Step 3 to the Job Template,
+  so it can authenticate without the rulebook ever needing to know the
+  password.
+
+Still as root on the `aap1.lab terminal` tab, run it:
 
 [source,bash,role="execute"]
 ----
@@ -232,19 +235,21 @@ Finally, let's wire the rulebook to actually launch that Job Template.
 .Step 5 - Wire the rulebook to launch the Job Template
 [%collapsible]
 =====
-Two things are needed on the EDA side: a credential so EDA can
-authenticate to Controller's API, and a new rule in the rulebook that
-launches the Job Template whenever a job succeeds. This also writes
-the rulebook's second rule, pushes it to the self-hosted repo, resyncs
-the EDA Project, and recreates the Activation with both credentials
-(Basic Auth + the new AAP Controller credential) attached. All of that
-was already written to `/root/wire-rulebook.sh` during lab setup - take
-a look, then run it, still on `aap1.lab terminal` as root:
+All of that was already written to `/root/wire-rulebook.sh` during lab
+setup. Running it does the following, in order:
 
-[source,bash,role="execute"]
-----
-cat /root/wire-rulebook.sh
-----
+* Creates an AAP Controller credential in EDA, so the rulebook can
+  authenticate to Controller's API when it launches the Job Template.
+* Adds a second rule to the rulebook that launches the Job Template
+  whenever a remote execution job succeeds, passing the affected host
+  through as an extra var, then pushes the updated rulebook to the
+  self-hosted repo.
+* Resyncs the EDA Project so it picks up that change.
+* Recreates the Activation with both credentials attached (the Basic
+  Auth credential from Module 3 and the new AAP Controller
+  credential), and the updated rulebook hash.
+
+Still on the `aap1.lab terminal` tab as root, run it:
 
 [source,bash,role="execute"]
 ----
