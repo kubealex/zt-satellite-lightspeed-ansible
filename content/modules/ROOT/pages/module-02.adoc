@@ -21,12 +21,15 @@ credentials from Module 1, if you aren't already).
 
 In the left navigation, go to *Red Hat Lightspeed -> Vulnerability*.
 
+.Vulnerability menu
+image::vulnerability-service-menu-bar.png[]
+
 This page is powered by Satellite's own, on-premises-hosted Red Hat
-Lightspeed Vulnerability service - despite the similar name, it's not
+Lightspeed Vulnerability service. Despite the similar name, it's not
 the same as the `console.redhat.com` cloud dashboard. Everything you
 see here comes from CVE/vulnerability data that was already synced into
 Satellite during lab setup, cross-referenced against each host's
-package list.
+package list. As well, no data leaves the Satellite server.
 =====
 ======
 
@@ -40,14 +43,24 @@ You should see a list of CVEs affecting your managed hosts, each with a
 severity rating (Critical/Important/Moderate/Low), a CVSS score, and a
 count of how many systems it affects.
 
+.Vulnerability dashboard
+image::vulnerabilities-dashboard.png[]
+
 Sort or filter by *Severity* to see the most impactful CVEs first. Note
 a few things as you browse the list:
+
+.Vulnerabilities sort button
+image::vulnerabilities-sort.png[]
 
 - The *Systems Affected* count links through to exactly which hosts
   (`rhel1.lab`, `rhel2.lab`, or both) are impacted by each CVE.
 - Not every CVE necessarily has a fix available *yet* in Satellite - a
   CVE only becomes actionable once Satellite has synced an erratum
   (patch) that resolves it.
+
+.Systems affected
+image:vulnerabilities-systems-affected.png[]
+
 =====
 ======
 
@@ -57,26 +70,20 @@ Finally, let's drill into one CVE to see exactly what fixes it.
 .Step 3 - Drill into one CVE's details
 [%collapsible]
 ======
-Click into any CVE affecting `rhel1.lab` or `rhel2.lab`. The detail page
+Click into any CVE affecting 2 systems.
+
+.Click into a CVE
+image::vulnerabilities-affected.png[]
+
+The detail page
 shows:
 
 - The full CVE description and CVSS score
 - Which hosts are affected
-- Which erratum (if any) resolves it, and the exact RPM package(s) it
-  ships
 
-Take note of one CVE and its affected host - you'll see this exact same
-data again in Module 4, but retrieved automatically via API by a custom
-script instead of by clicking through this page by hand.
+.CVE detail page
+image::vulnerabilities-details.png[]
 
-[NOTE]
-====
-This dashboard is a human-friendly view over the same on-premises
-Lightspeed Vulnerability API and Katello errata API that
-`vulnerability_remediation.py` (introduced in Module 4) queries
-programmatically. Everything you're looking at here is exactly what
-that script sees, too.
-====
 ======
 =======
 
