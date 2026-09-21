@@ -1295,6 +1295,30 @@ fi
 podman login --tls-verify=false -u admin -p "$AAP_ADMIN_PASSWORD" aap1.lab
 podman push --tls-verify=false aap1.lab/ee-vuln-finder:latest
 
+# Controller runs containerized/rootless as aap1-user, and launches every
+# job/project-sync Execution Environment via podman with slirp4netns
+# networking (DEFAULT_CONTAINER_RUN_OPTIONS in controller/etc/settings.py).
+# slirp4netns's default subnet (10.0.2.0/24) both collides with aap1's real
+# enp1s0 address AND, without allow_host_loopback=true, blocks the EE from
+# reaching this host's sshd at all. That matters because Module 4's
+# Controller Project pulls the self-hosted vulnerability-remediation git
+# repo over ssh to aap1's own sshd (via podman's host.containers.internal
+# alias). Enable allow_host_loopback so that project sync can succeed, then
+# restart the controller-task service so it picks up the change. Idempotent.
+CTRL_SETTINGS=/home/aap1-user/aap/controller/etc/settings.py
+if [ -f "$CTRL_SETTINGS" ] && ! grep -q 'allow_host_loopback=true' "$CTRL_SETTINGS"; then
+  sed -i 's/slirp4netns:enable_ipv6=true"/slirp4netns:enable_ipv6=true,allow_host_loopback=true"/' "$CTRL_SETTINGS"
+  chown aap1-user:aap1-user "$CTRL_SETTINGS"
+  sudo -iu aap1-user env XDG_RUNTIME_DIR=/run/user/$(id -u aap1-user) \
+    systemctl --user restart automation-controller-task.service || true
+  # Give the task container a moment to come back before we hit the API.
+  for i in $(seq 1 30); do
+    curl -sk -o /dev/null -u "admin:$AAP_ADMIN_PASSWORD" \
+      "https://localhost/api/controller/v2/ping/" && break
+    sleep 2
+  done
+fi
+
 export CTRL_API="https://localhost/api/controller/v2"
 export CTRL_AUTH="admin:$AAP_ADMIN_PASSWORD"
 EE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/execution_environments/?name=Vulnerability%20Finder%20EE" \
@@ -1354,34 +1378,34 @@ print(json.dumps({
 fi
 echo "SCM_CRED_ID=$SCM_CRED_ID"
 
-# Controller's Project sync runs inside an isolated Execution
-# Environment container on podman's own bridge network, not host
-# networking. "localhost" and "aap1.lab" both resolve to loopback
-# there (aap1.lab is a static /etc/hosts loopback alias on this host,
-# confirmed via 'getent hosts aap1.lab' -> ::1) - that is the
-# container's OWN loopback, not the host's, so both fail identically
-# with "connect to host ... port 22: Connection refused". The host's
-# own real, outward-facing IP (e.g. from 'ip -4 addr show scope
-# global') does not work either - confirmed live it fails with
-# "Network is unreachable", since that address lives on a completely
-# different network layer than podman's bridge (this host's own
-# "real" address is itself a masqueraded VM address on a
-# virtualization platform, one layer removed from podman's bridge
-# network here). What actually works, confirmed live, is podman's
-# default bridge gateway IP: sshd listens on 0.0.0.0 (all interfaces,
-# confirmed via 'ss -tlnp'), and podman's bridge network routes
-# through the host for any service listening on all interfaces, so
-# that gateway IP reaches it correctly. The EDA Project earlier in
-# this file legitimately uses "localhost" because EDA's own Project
-# sync does not run inside such a container.
-AAP1_REAL_IP=$(podman network inspect podman 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['subnets'][0]['gateway'])")
+# Controller's Project sync runs inside an Execution Environment
+# container that this containerized/rootless AAP launches via aap1-user's
+# podman with slirp4netns networking (see DEFAULT_CONTAINER_RUN_OPTIONS in
+# controller/etc/settings.py). From inside that container the ONLY way to
+# reach this host's sshd - where the self-hosted git repo lives - is
+# podman's "host.containers.internal" alias, and only because setup-aap1.sh
+# added allow_host_loopback=true to those slirp4netns options. Neither the
+# host's real IP (10.0.2.x, which collides with slirp4netns's own subnet ->
+# "Network is unreachable") nor podman's bridge gateway (10.88.0.1, unused
+# by these rootless slirp4netns containers -> "Connection refused") work
+# here. The EDA Project earlier in this file legitimately uses "localhost"
+# because EDA's own Project sync does not run inside such a container.
+GIT_HOST="host.containers.internal"
+SCM_URL="ssh://aap1-user@${GIT_HOST}/home/aap1-user/git/vulnerability-remediation.git"
 PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/projects/?name=Vulnerability%20Package%20Finder" \
   | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
 if [ -z "$PROJECT_ID" ]; then
   PROJECT_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/projects/" \
     -H "Content-Type: application/json" \
-    -d "{\"name\": \"Vulnerability Package Finder\", \"organization\": 1, \"scm_type\": \"git\", \"scm_url\": \"ssh://aap1-user@$AAP1_REAL_IP/home/aap1-user/git/vulnerability-remediation.git\", \"credential\": $SCM_CRED_ID}" \
+    -d "{\"name\": \"Vulnerability Package Finder\", \"organization\": 1, \"scm_type\": \"git\", \"scm_url\": \"$SCM_URL\", \"credential\": $SCM_CRED_ID}" \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+else
+  # Self-heal: an already-existing project (e.g. from an earlier attempt)
+  # may carry a stale, unreachable scm_url - force it to the correct value
+  # and SCM credential so idempotent re-runs actually converge.
+  curl -sk -u "$CTRL_AUTH" -X PATCH "$CTRL_API/projects/$PROJECT_ID/" \
+    -H "Content-Type: application/json" \
+    -d "{\"scm_url\": \"$SCM_URL\", \"credential\": $SCM_CRED_ID}" > /dev/null
 fi
 echo "PROJECT_ID=$PROJECT_ID"
 
