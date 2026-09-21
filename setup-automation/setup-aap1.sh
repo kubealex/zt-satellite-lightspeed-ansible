@@ -100,6 +100,12 @@ set -e
 set -x
 trap 'echo "==> FAILED at line $LINENO (exit code $?)" >&2' ERR
 
+echo "==> 0. Extend the AAP session timeout so the web UI stops logging participants out"
+# SESSION_COOKIE_AGE is in seconds; default is 1800 (30 minutes), which
+# is too short for a lab session. 28800 is 8 hours.
+curl -sk -u "admin:$AAP_ADMIN_PASSWORD" -X PATCH "https://localhost/api/controller/v2/settings/system/" \
+  -H "Content-Type: application/json" -d '{"SESSION_COOKIE_AGE": 28800}' > /dev/null
+
 export EDA_API="https://localhost/api/eda/v1"
 export EDA_AUTH="admin:$AAP_ADMIN_PASSWORD"
 export REPO_URL="ssh://aap1-user@localhost/home/aap1-user/git/satellite-webhook.git"
