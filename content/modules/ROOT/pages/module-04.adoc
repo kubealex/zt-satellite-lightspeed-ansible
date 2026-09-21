@@ -174,6 +174,10 @@ the following, in order:
 * Attaches the Satellite credential from Step 2 to the Job Template,
   so it can authenticate without the rulebook ever needing to know the
   password.
+* Attaches a Machine credential (the lab's SSH key, connecting as
+  `root`) to the Job Template. The playbook's second play installs the
+  fixed RPMs *on the affected host* over SSH, so without a Machine
+  credential every host would fail with `Permission denied (publickey)`.
 
 Still as root on the `aap1.lab terminal` tab, run it:
 
@@ -203,10 +207,14 @@ setup. Running it does the following, in order:
 
 * Creates an AAP Controller credential in EDA, so the rulebook can
   authenticate to Controller's API when it launches the Job Template.
-* Adds a second rule to the rulebook that launches the Job Template
-  whenever a remote execution job succeeds, passing the affected host
-  through as an extra var, then pushes the updated rulebook to the
-  self-hosted repo.
+* Extends the rulebook so that, whenever a remote execution job
+  succeeds, it both logs the event *and* launches the Job Template,
+  passing the affected host through as an extra var, then pushes the
+  updated rulebook to the self-hosted repo. Note this is done by adding
+  a second *action* to the existing success rule rather than a second
+  *rule*: ansible-rulebook's engine fires only one rule per event (the
+  first matching rule consumes it), so a separate remediation rule
+  sitting behind the catch-all log rule would never fire.
 * Resyncs the EDA Project so it picks up that change.
 * Recreates the Activation with both credentials attached (the Basic
   Auth credential from Module 3 and the new AAP Controller

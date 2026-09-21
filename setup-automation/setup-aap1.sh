@@ -1378,6 +1378,32 @@ print(json.dumps({
 fi
 echo "SCM_CRED_ID=$SCM_CRED_ID"
 
+# The remediation playbook's second play (install the fixed RPMs) runs
+# ON the affected host over SSH with become, so the Job Template needs a
+# Machine credential - without one the EE cannot connect and every host
+# fails with "Permission denied (publickey)". Reuse the lab's own SSH key
+# (the IdentityFile root already uses to reach every managed host, per
+# /root/.ssh/config) as that credential, connecting as root.
+MACHINE_CRED_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credentials/?name=Managed%20Hosts%20SSH" \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
+if [ -z "$MACHINE_CRED_ID" ]; then
+  MACHINE_CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credential_types/?namespace=ssh" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
+  LAB_SSH_KEY_FILE=$(awk '/IdentityFile/{print $2; exit}' /root/.ssh/config | sed "s|^~|$HOME|")
+  [ -f "$LAB_SSH_KEY_FILE" ] || LAB_SSH_KEY_FILE=$(ls /root/.ssh/*.pem 2>/dev/null | head -1)
+  MACHINE_CRED_ID=$(LAB_SSH_KEY_FILE="$LAB_SSH_KEY_FILE" MACHINE_CRED_TYPE_ID="$MACHINE_CRED_TYPE_ID" python3 -c "
+import json, os
+print(json.dumps({
+    'name': 'Managed Hosts SSH',
+    'organization': 1,
+    'credential_type': int(os.environ['MACHINE_CRED_TYPE_ID']),
+    'inputs': {'username': 'root', 'ssh_key_data': open(os.environ['LAB_SSH_KEY_FILE']).read()},
+}))
+" | curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credentials/" -H "Content-Type: application/json" -d @- \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+fi
+echo "MACHINE_CRED_ID=$MACHINE_CRED_ID"
+
 # Controller's Project sync runs inside an Execution Environment
 # container that this containerized/rootless AAP launches via aap1-user's
 # podman with slirp4netns networking (see DEFAULT_CONTAINER_RUN_OPTIONS in
@@ -1436,8 +1462,13 @@ if [ -z "$JT_ID" ]; then
 fi
 echo "JT_ID=$JT_ID"
 
+# Attach BOTH credentials: the Satellite API cred (for the scan play on
+# localhost) and the Machine cred (for the install play over SSH on the
+# affected host). A Job Template can hold one credential of each type.
 curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/job_templates/$JT_ID/credentials/" \
   -H "Content-Type: application/json" -d "{\"id\": $CRED_ID}"
+curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/job_templates/$JT_ID/credentials/" \
+  -H "Content-Type: application/json" -d "{\"id\": $MACHINE_CRED_ID}"
 CTRLPROJ_EOF
 chmod +x /root/create-controller-project.sh
 
@@ -1484,21 +1515,24 @@ cat > rulebooks/satellite-webhook.yml <<RULEBOOK_EOF
         port: 5000
       name: satellite_webhook
   rules:
-    - name: Log Satellite remote execution success
-      condition: true
-      action:
-        debug:
-          msg: "Received Satellite webhook: {{ event }}"
-
-    - name: Find and remediate CVEs on the affected host
+    # NOTE: this is deliberately ONE rule with TWO actions, not two rules.
+    # ansible-rulebook's drools engine fires at most ONE rule per event
+    # (first matching rule wins, then the event is consumed), so a separate
+    # catch-all "condition: true" logging rule listed first would swallow
+    # every event and the remediation rule below it would never fire. Running
+    # both the debug log and the job-template launch as two actions of a
+    # single success-scoped rule is the correct way to make both happen.
+    - name: Log Satellite remote execution success and remediate CVEs
       condition: event.payload.task_result == "success"
-      action:
-        run_job_template:
-          name: "Vulnerability Package Finder and Remediator"
-          organization: "Default"
-          job_args:
-            extra_vars:
-              host_name: "{{ event.payload.host_name }}"
+      actions:
+        - debug:
+            msg: "Received Satellite webhook: {{ event }}"
+        - run_job_template:
+            name: "Vulnerability Package Finder and Remediator"
+            organization: "Default"
+            job_args:
+              extra_vars:
+                host_name: "{{ event.payload.host_name }}"
 RULEBOOK_EOF
 git add rulebooks/satellite-webhook.yml
 git commit -m "Launch the vulnerability finder/remediator job template on success" || true
