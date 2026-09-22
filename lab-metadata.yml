@@ -5,9 +5,11 @@ lab:
 
   description:
     summary: "This lab demonstrates the operation of the proactive remediation process."
-    goal: "This lab demonstrates the operation of the proactive remediation process."
+    goal: "This lab demonstrates the operation of the proactive remediation process using Red Hat Lightspeed on-premises and AAP with Satellite."
     concepts:
      - "Satellite"
+     - "AAP"
+     - "Red Hat Lightspeed on-premises"
     use_case: "This lab demonstrates the operation of the proactive remediation process."
     time_to_complete: "1 hour"
 
