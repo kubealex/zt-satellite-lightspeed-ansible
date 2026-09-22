@@ -310,5 +310,11 @@ A host that needed patches shows `changed`. That is the fleet-wide sweep
 in action. Each host is remediated with exactly its own package set,
 independent of which host triggered the run.
 ====
+
+Every playbook and script this lab ran along the way, the webhook
+template, the webhook itself, the vulnerability finder, the remediation
+playbook, and the Controller/EDA wiring, is documented and available in
+the lab's own GitHub repo:
+https://github.com/rhpds/zt-satellite-lightspeed-ansible.
 =====
 ======
