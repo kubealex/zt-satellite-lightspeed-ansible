@@ -198,20 +198,13 @@ many times as it takes for the event to land. If any of the objects it
 looks up is missing, it stops with a message naming which one, instead
 of the log tail silently coming back empty.
 
-In the log tail you should see a line like:
-
-[source,js]
-----
-Received Satellite webhook: {'payload': {'host_name': 'rhel1.lab', 'task_result': 'success', ...}, 'meta': {...}}
-----
-
-Here is an example of the output on the `aap1.lab` terminal:
+Here's what the output looks like on the `aap1.lab` terminal:
 
 .Webhook output on `aap1.lab` terminal
-image::webhook-metadata-received.png[]
+image::received-webhook.png[]
 
-That line with the current timestamp confirms the Satellite to AAP EDA
-webhook pipeline is fully wired up end to end.
+. We can see the webhook event was received.
+. This section contains the payload of the webhook event.
 
 [TIP]
 ====
