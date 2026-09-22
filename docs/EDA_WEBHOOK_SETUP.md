@@ -786,13 +786,12 @@ curl -sk -u "$EDA_AUTH" -X DELETE "$EDA_API/activations/$ACTIVATION_ID/"
 ### 6. Verify end-to-end
 
 `rhel1.lab`/`rhel2.lab` already have deliberately vulnerable packages
-seeded by `setup-satellite.sh` (old `openssl`, `libvpx`, `gnutls`,
-`tar`). Check versions before, trigger a job on Satellite, then check
+seeded by `setup-satellite.sh` (old `openssl`, `gnutls`, `tar`). Check versions before, trigger a job on Satellite, then check
 Controller for the launched job and versions again afterward:
 
 ```bash
 # on rhel1.lab, before:
-rpm -q openssl openssl-libs libvpx gnutls tar
+rpm -q openssl openssl-libs gnutls tar
 
 # on satellite.lab:
 hammer job-invocation create --job-template "Run Command - Ansible Default" \
@@ -803,5 +802,5 @@ curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/?job_template__name=Vulnerability%20Pac
   | python3 -m json.tool
 
 # on rhel1.lab, after - versions should have changed:
-rpm -q openssl openssl-libs libvpx gnutls tar
+rpm -q openssl openssl-libs gnutls tar
 ```

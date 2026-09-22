@@ -16,7 +16,7 @@ echo "Solving module-05" >> /tmp/progress.log
 # Step 1: check the deliberately-vulnerable package versions on rhel1.lab
 # before triggering anything.
 ssh -o StrictHostKeyChecking=no root@rhel1.lab \
-  "rpm -q openssl openssl-libs libvpx gnutls tar" >> /tmp/progress.log 2>&1
+  "rpm -q openssl openssl-libs gnutls tar" >> /tmp/progress.log 2>&1
 
 # Step 2: trigger a remote execution job on Satellite - this is what
 # fires the webhook wired up in Module 3/4.
@@ -50,6 +50,6 @@ REMOTE_EOF
 
 # Step 4: confirm the packages were actually upgraded on rhel1.lab.
 ssh -o StrictHostKeyChecking=no root@rhel1.lab \
-  "rpm -q openssl openssl-libs libvpx gnutls tar" >> /tmp/progress.log 2>&1
+  "rpm -q openssl openssl-libs gnutls tar" >> /tmp/progress.log 2>&1
 
 echo "Solved module-05" >> /tmp/progress.log
