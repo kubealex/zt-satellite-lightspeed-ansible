@@ -342,13 +342,19 @@
     # Unlike the ansible.controller.job_template module, the REST API does not
     # take credentials inline on the job template itself - they are associated
     # through this sub-endpoint, which no-ops on an already-attached id.
+    #
+    # The | int is required. Every other id in this playbook is a relation
+    # field that Controller coerces from a string, but this one is a plain
+    # IntegerField, and a templated "{{ ... }}" arrives as the string "3":
+    #
+    #   Status code was 400: {"msg": "\"id\" field must be an integer."}
     - name: Attach the Satellite API and Machine credentials
       ansible.builtin.uri:
         url: "{{ controller_api }}/job_templates/{{ job_template_id }}/credentials/"
         method: POST
         body:
-          id: "{{ item }}"
+          id: "{{ item | int }}"
         status_code: [201, 204]
       loop:
-        - "{{ r_sat_cred.json.results[0].id }}"
-        - "{{ machine_credential_id }}"
+        - "{{ r_sat_cred.json.results[0].id | int }}"
+        - "{{ machine_credential_id | int }}"
