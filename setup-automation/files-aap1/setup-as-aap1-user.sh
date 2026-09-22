@@ -1,18 +1,20 @@
 #!/bin/bash
+# Everything in this file runs as aap1-user. setup-aap1.sh invokes it
+# via `sudo -u aap1-user ... bash <this file> <payload dir>`, because the
+# self-hosted git repo, the deploy key, and the EDA API calls all assume
+# that user's $HOME. AAP_ADMIN_PASSWORD arrives through sudo's
+# --preserve-env. Not meant to be run on its own.
 set -e
-# This heredoc is single-quoted, so $PAYLOAD_DIR from the outer script
-# does not expand in here. `bash -s` passes it in as $1 instead, which
-# keeps the path defined in exactly one place.
+# Passed in as an argument rather than hardcoded, so the path stays
+# defined in exactly one place (setup-aap1.sh).
 PAYLOAD_DIR="$1"
-: "${PAYLOAD_DIR:?AAPUSER block: PAYLOAD_DIR argument not passed}"
+: "${PAYLOAD_DIR:?PAYLOAD_DIR argument not passed by setup-aap1.sh}"
 # The outer 'sh -x .../setup-aap1.sh > setup-aap1.log 2>&1' invocation
-# (see setup-automation/main.yml) only traces this outer script's own
-# lines - it never sees inside this heredoc, since that content is fed
-# to a separate bash process via stdin, not read by the outer shell as
-# script text. Turn tracing on again here so the log file actually
-# captures every command this block runs, and add an ERR trap so a
-# failure is unmistakable (with a line number) instead of the log just
-# silently stopping mid-step.
+# (see setup-automation/main.yml) only traces setup-aap1.sh's own lines.
+# xtrace is not inherited across the exec into this script, so turn it
+# on again here and the log file captures every command this file runs
+# too. The ERR trap makes a failure unmistakable, with a line number
+# that refers to this file, instead of the log just stopping mid-step.
 set -x
 trap 'echo "==> FAILED at line $LINENO (exit code $?)" >&2' ERR
 

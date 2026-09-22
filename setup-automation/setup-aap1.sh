@@ -13,10 +13,11 @@
 # See docs/EDA_WEBHOOK_SETUP.md for the full manual/CLI walkthrough this
 # script automates, including troubleshooting notes.
 
-# The large payloads this script installs (the vulnerability finder, the
-# remediation playbook, the Containerfile, and Module 4's two /root
-# helper scripts) ship alongside it as real files, in
-# setup-automation/files-aap1/, copied here by setup-automation/main.yml.
+# The bulk of the work ships alongside this script as real files, in
+# setup-automation/files-aap1/, copied here by setup-automation/main.yml:
+# the whole aap1-user half of setup (setup-as-aap1-user.sh), the
+# vulnerability finder, the remediation playbook, the Containerfile, and
+# Module 4's two /root helper scripts.
 #
 # This script has no `set -e`, so a missing payload would fail silently
 # and we would go on to git-commit and push a repo with files missing.
@@ -132,11 +133,12 @@ if [ -f /root/.ssh/authorized_keys ]; then
   chown aap1-user:aap1-user /home/aap1-user/.ssh/authorized_keys
 fi
 
-# Everything below runs as aap1-user, since the self-hosted git repo,
-# deploy key, and EDA API calls (as aap1-user's own SSH session) all
-# assume that user's $HOME. --preserve-env carries AAP_ADMIN_PASSWORD
-# through to the sudo'd shell; the heredoc itself is single-quoted so
-# none of its own $(...) / $VAR usage is touched by the outer shell.
+# The aap1-user half of setup: the self-hosted rulebook repo, the deploy
+# key, the EDA credentials/Project/Event Stream/Activation, and the
+# vulnerability-remediation repo. It runs as aap1-user because all of
+# that assumes that user's $HOME. --preserve-env carries
+# AAP_ADMIN_PASSWORD through to the sudo'd shell; PAYLOAD_DIR goes in as
+# an argument, since the script cannot see this shell's variables.
 export AAP_ADMIN_PASSWORD
 sudo -u aap1-user --preserve-env=AAP_ADMIN_PASSWORD -H \
   bash "$PAYLOAD_DIR/setup-as-aap1-user.sh" "$PAYLOAD_DIR"
