@@ -1,0 +1,147 @@
+---
+# Module 4, Step 3: the Controller Project that pulls the self-hosted
+# vulnerability-remediation repo, and the Job Template that runs its
+# find_and_remediate.yml.
+#
+# Idempotent: every object is state: present, so a re-run converges an
+# existing one rather than failing on a duplicate name. Objects are
+# addressed by name throughout, so unlike the curl version this replaced
+# there are no id lookups to thread from one call to the next.
+- name: Create the Controller Project and Job Template
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Same literal as AAP_ADMIN_PASSWORD in setup-aap1.sh - see the comment
+    # there; this file is one of the places it is hardcoded.
+    aap_admin_password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+    controller_api_host: https://localhost
+    # Controller's Project sync runs inside an Execution Environment
+    # container that this containerized/rootless AAP launches via aap1-user's
+    # podman with slirp4netns networking (see DEFAULT_CONTAINER_RUN_OPTIONS in
+    # controller/etc/settings.py). From inside that container the ONLY way to
+    # reach this host's sshd - where the self-hosted git repo lives - is
+    # podman's "host.containers.internal" alias, and only because setup-aap1.sh
+    # added allow_host_loopback=true to those slirp4netns options. Neither the
+    # host's real IP (10.0.2.x, which collides with slirp4netns's own subnet ->
+    # "Network is unreachable") nor podman's bridge gateway (10.88.0.1, unused
+    # by these rootless slirp4netns containers -> "Connection refused") work
+    # here. The EDA Project created during setup legitimately uses "localhost"
+    # because EDA's own Project sync does not run inside such a container.
+    git_host: host.containers.internal
+    scm_url: "ssh://aap1-user@{{ git_host }}/home/aap1-user/git/vulnerability-remediation.git"
+  module_defaults:
+    group/ansible.controller.controller:
+      controller_host: "{{ controller_api_host }}"
+      controller_username: admin
+      controller_password: "{{ aap_admin_password }}"
+      validate_certs: false
+  tasks:
+    # Reuse the SAME deploy key from Module 3 as the SCM credential. This
+    # playbook runs as root, so the key is read directly - the curl version
+    # only shelled out to aap1-user to expand the ~ in the path.
+    - name: Reuse Module 3's deploy key as the SCM credential
+      ansible.controller.credential:
+        name: Self-hosted repo deploy key (Controller)
+        organization: Default
+        credential_type: Source Control
+        inputs:
+          ssh_key_data: "{{ lookup('ansible.builtin.file', '/home/aap1-user/.ssh/eda_project_deploy_key') }}"
+        state: present
+
+    # The remediation playbook's second play (install the fixed RPMs) runs
+    # ON the affected host over SSH with become, so the Job Template needs a
+    # Machine credential - without one the EE cannot connect and every host
+    # fails with "Permission denied (publickey)". Reuse the lab's own SSH key
+    # (the IdentityFile root already uses to reach every managed host, per
+    # /root/.ssh/config) as that credential, connecting as root.
+    #
+    # Kept as shell deliberately: expressing "first IdentityFile in the
+    # config, else any .pem" natively takes a slurp, a regex, a stat and a
+    # find, which is harder to follow than the two lines it replaces.
+    - name: Locate the lab SSH key that reaches every managed host
+      ansible.builtin.shell:
+        cmd: |
+          set -e
+          KEY=$(awk '/IdentityFile/{print $2; exit}' /root/.ssh/config | sed "s|^~|$HOME|")
+          [ -f "$KEY" ] || KEY=$(ls /root/.ssh/*.pem 2>/dev/null | head -1)
+          echo "$KEY"
+      register: r_lab_ssh_key
+      changed_when: false
+
+    - name: Fail early if no usable SSH key was found
+      ansible.builtin.assert:
+        that:
+          - r_lab_ssh_key.stdout | trim | length > 0
+        fail_msg: >-
+          No IdentityFile in /root/.ssh/config and no /root/.ssh/*.pem - the
+          Job Template would be created without a Machine credential and every
+          host would fail with "Permission denied (publickey)".
+
+    - name: Create the Machine credential for the install play
+      ansible.controller.credential:
+        name: Managed Hosts SSH
+        organization: Default
+        credential_type: Machine
+        inputs:
+          username: root
+          ssh_key_data: "{{ lookup('ansible.builtin.file', r_lab_ssh_key.stdout | trim) }}"
+        state: present
+
+    # state: present also self-heals: an already-existing project (e.g. from
+    # an earlier attempt) carrying a stale, unreachable scm_url is converged
+    # back to the correct value and SCM credential, which the curl version
+    # needed a separate PATCH branch for.
+    - name: Create or repair the Controller Project
+      ansible.controller.project:
+        name: Vulnerability Package Finder
+        organization: Default
+        scm_type: git
+        scm_url: "{{ scm_url }}"
+        scm_credential: Self-hosted repo deploy key (Controller)
+        state: present
+
+    - name: Sync the project and wait for it to finish
+      ansible.controller.project_update:
+        project: Vulnerability Package Finder
+        wait: true
+        interval: 2
+        timeout: 120
+
+    # Reuse an existing inventory - our playbook targets localhost for the
+    # scan, then dynamically adds the affected hosts via add_host, so it
+    # doesn't matter which inventory is attached.
+    #
+    # module_defaults does not reach lookup plugins, so the connection
+    # details have to be repeated here.
+    - name: Pick whichever inventory already exists
+      ansible.builtin.set_fact:
+        inventory_name: >-
+          {{ (query('ansible.controller.controller_api', 'inventories',
+                    query_params={'page_size': 1},
+                    host=controller_api_host,
+                    username='admin',
+                    password=aap_admin_password,
+                    verify_ssl=false) | first).name }}
+
+    - name: Create the Job Template that runs find_and_remediate.yml
+      ansible.controller.job_template:
+        name: Vulnerability Package Finder and Remediator
+        job_type: run
+        organization: Default
+        inventory: "{{ inventory_name }}"
+        project: Vulnerability Package Finder
+        playbook: find_and_remediate.yml
+        execution_environment: Vulnerability Finder EE
+        # Required. It allows the EDA rulebook to pass host_name (the host
+        # that fired the webhook) as an extra var when it launches this job
+        # template. Without it, Controller ignores any extra vars supplied at
+        # launch time.
+        ask_variables_on_launch: true
+        # Attach BOTH credentials: the Satellite API cred (for the scan play
+        # on localhost) and the Machine cred (for the install play over SSH
+        # on each affected host). A Job Template can hold one of each type.
+        credentials:
+          - "Satellite Admin (API)"
+          - "Managed Hosts SSH"
+        state: present

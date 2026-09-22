@@ -124,49 +124,85 @@ Next, create the Satellite API credential the playbook will use.
 =====
 The playbook needs Satellite admin credentials, but the rulebook should
 not have to know them. A Controller credential injects them
-automatically whenever the Job Template runs. Still as root on
-`aap1.lab terminal`:
+automatically whenever the Job Template runs.
+
+Two Controller objects are involved. A *credential type* defines the
+shape of the credential: which fields it holds, and how those fields
+reach a running job. A *credential* is one filled-in instance of that
+type. Satellite is not one of Controller's built-in credential types, so
+this lab defines its own.
+
+Like the scripts in the next two steps, the playbook that creates them
+was already written to `/root/create-satellite-credential.yml` during
+lab setup:
+
+[source,yaml]
+----
+- name: Create the Satellite API credential in Controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Define the Satellite API credential type
+      ansible.controller.credential_type:
+        name: Satellite API Credentials
+        kind: cloud
+        inputs:
+          fields:
+            - id: username
+              type: string
+              label: Username
+            - id: password
+              type: string
+              label: Password
+              secret: true
+          required:
+            - username
+            - password
+        injectors:
+          extra_vars:
+            satellite_username: !unsafe '{{ username }}'
+          env:
+            SATELLITE_PASSWORD: !unsafe '{{ password }}'
+        state: present
+
+    - name: Create the Satellite admin credential
+      ansible.controller.credential:
+        name: Satellite Admin (API)
+        organization: Default
+        credential_type: Satellite API Credentials
+        inputs:
+          username: admin
+          password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+        state: present
+----
+
+The `injectors` block is the part that matters. It is what makes the
+credential *usable without being known*: at launch time Controller
+hands the username to the playbook as the `satellite_username` extra
+var, and the password as the `SATELLITE_PASSWORD` environment variable.
+Those are exactly the two things `find_and_remediate.yml` consumes when
+it calls `vulnerability_remediation.py --username {{ satellite_username }}`.
+The password is never written into the playbook, the rulebook, or the
+repo.
+
+[NOTE]
+====
+`!unsafe` on those two values is required, not decoration. `{{ username }}`
+and `{{ password }}` are *Controller's* templates, filled in by Controller
+when it launches a job. Without `!unsafe`, Ansible would try to resolve
+them while creating the credential type and fail on an undefined variable.
+====
+
+Still as root on the `aap1.lab terminal` tab, run it:
 
 [source,bash,role="execute"]
 ----
-export CTRL_API="https://localhost/api/controller/v2"
-export CTRL_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
-
-CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credential_types/?name=Satellite%20API%20Credentials" \
-  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
-
-if [ -z "$CRED_TYPE_ID" ]; then
-  CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credential_types/" \
-    -H "Content-Type: application/json" \
-    -d '{
-      "name": "Satellite API Credentials",
-      "kind": "cloud",
-      "inputs": {
-        "fields": [
-          {"id": "username", "type": "string", "label": "Username"},
-          {"id": "password", "type": "string", "label": "Password", "secret": true}
-        ],
-        "required": ["username", "password"]
-      },
-      "injectors": {
-        "extra_vars": {"satellite_username": "{{ username }}"},
-        "env": {"SATELLITE_PASSWORD": "{{ password }}"}
-      }
-    }' | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-fi
-echo "CRED_TYPE_ID=$CRED_TYPE_ID"
-
-CRED_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credentials/?name=Satellite%20Admin%20(API)" \
-  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
-
-if [ -z "$CRED_ID" ]; then
-  CRED_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credentials/" \
-    -H "Content-Type: application/json" \
-    -d "{\"name\": \"Satellite Admin (API)\", \"organization\": 1, \"credential_type\": $CRED_TYPE_ID, \"inputs\": {\"username\": \"admin\", \"password\": \"bc31c9a6-9ff0-11ec-9587-00155d1b0702\"}}" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-fi
-echo "CRED_ID=$CRED_ID"
+ansible-playbook /root/create-satellite-credential.yml
 ----
+
+Re-running it is safe. Both tasks use `state: present`, so a second run
+reports `ok` rather than creating a duplicate.
 =====
 ======
 
@@ -177,7 +213,7 @@ Then create the Controller Project and Job Template.
 [%collapsible]
 =====
 Rather than pasting that logic by hand, it was already written to
-`/root/create-controller-project.sh` during lab setup. Running it does
+`/root/create-controller-project.yml` during lab setup. Running it does
 the following, in order:
 
 * Reuses Module 3's deploy key as the SCM credential, so Controller
@@ -199,7 +235,7 @@ Still as root on the `aap1.lab terminal` tab, run it:
 
 [source,bash,role="execute"]
 ----
-/root/create-controller-project.sh
+ansible-playbook /root/create-controller-project.yml
 ----
 
 [NOTE]
@@ -220,7 +256,7 @@ Finally, wire the rulebook to actually launch that Job Template.
 .Step 4 - Wire the rulebook to launch the Job Template
 [%collapsible]
 =====
-All of that was already written to `/root/wire-rulebook.sh` during lab
+All of that was already written to `/root/wire-rulebook.yml` during lab
 setup. Running it does the following, in order:
 
 * Creates an AAP Controller credential in EDA, so the rulebook can
@@ -228,8 +264,8 @@ setup. Running it does the following, in order:
 * Extends the rulebook so that, whenever a remote execution job
   succeeds, it both logs the event *and* launches the Job Template. The
   triggering host is passed through as an extra var for the audit trail,
-  and the playbook still remediates every affected host. The script then
-  pushes the updated rulebook to the self-hosted repo. This is done by
+  and the playbook still remediates every affected host. It then pushes
+  the updated rulebook to the self-hosted repo. This is done by
   adding a second *action* to the existing success rule rather than a
   second *rule*. The ansible-rulebook engine fires only one rule per
   event, since the first matching rule consumes it. A separate
@@ -244,7 +280,7 @@ Still on the `aap1.lab terminal` tab as root, run it:
 
 [source,bash,role="execute"]
 ----
-/root/wire-rulebook.sh
+ansible-playbook /root/wire-rulebook.yml
 ----
 =====
 ======

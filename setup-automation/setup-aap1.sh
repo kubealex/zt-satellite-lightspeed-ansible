@@ -5,8 +5,8 @@
 # aap1-* golden image - this script wires up the Satellite -> EDA
 # webhook pipeline (self-hosted rulebook repo, EDA credentials,
 # Project, Event Stream, Activation), the registry.redhat.io pre-auth
-# and vulnerability-remediation repo Module 4 needs, and the two
-# scripts Module 4's Steps 4/5 walk the participant through running.
+# and vulnerability-remediation repo Module 4 needs, and the three
+# helpers Module 4's Steps 2/3/4 walk the participant through running.
 # Idempotent: every step here is safe to run again on every
 # (re)provision.
 #
@@ -16,8 +16,9 @@
 # The bulk of the work ships alongside this script as real files, in
 # setup-automation/files-aap1/, copied here by setup-automation/main.yml:
 # the whole aap1-user half of setup (setup-as-aap1-user.sh), the
-# vulnerability finder, the remediation playbook, the Containerfile, and
-# Module 4's two /root helper scripts.
+# vulnerability finder, the remediation playbook, the Containerfile,
+# Module 4's three /root playbooks, and the EDA rulebook the third of
+# them publishes.
 #
 # This script has no `set -e`, so a missing payload would fail silently
 # and we would go on to git-commit and push a repo with files missing.
@@ -27,7 +28,8 @@
 PAYLOAD_DIR=/tmp/setup-scripts/files-aap1
 for _f in setup-as-aap1-user.sh \
           Containerfile find_and_remediate.yml vulnerability_remediation.py \
-          create-controller-project.sh wire-rulebook.sh; do
+          create-satellite-credential.yml create-controller-project.yml \
+          wire-rulebook.yml satellite-webhook-rulebook.yml; do
   if [ ! -s "$PAYLOAD_DIR/$_f" ]; then
     echo "==> SETUP-AAP1: FAILED - missing or empty payload $PAYLOAD_DIR/$_f" >&2
     exit 1
@@ -58,7 +60,8 @@ sed -i 's/^download_updates.*/download_updates = no/' /etc/dnf/automatic.conf
 # aap1-user OS account password. It matches Satellite's admin password.
 #
 # Changing it here is not enough. The same literal is hardcoded in
-# files-aap1/create-controller-project.sh, files-aap1/wire-rulebook.sh,
+# files-aap1/create-satellite-credential.yml,
+# files-aap1/create-controller-project.yml, files-aap1/wire-rulebook.yml,
 # the module .adocs, and the solve scripts, none of which can reference
 # this variable.
 AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
@@ -195,21 +198,28 @@ if [ -z "$EE_ID" ]; then
 fi
 echo "EE_ID=$EE_ID"
 
-# Pre-populate the two scripts Module 4 (Steps 3 and 4) walks the
-# participant through running. Both are fully self-contained and
-# idempotent (same "look it up by name, create if missing" pattern used
-# throughout this file), so they don't depend on any shell variables
-# from earlier steps in the participant's own terminal session - only
-# on resources that already exist by the time each step runs. Writing
-# these here (rather than having the participant paste large heredocs
-# that write intermediate helper files, e.g. a Python payload builder
-# or the rulebook YAML, by hand) removes that copy/paste risk the same
-# way Step 1's Containerfile/find_and_remediate.yml/
-# vulnerability_remediation.py pre-population already does - Module 4
-# only explains what each script does and runs it, it never creates one
-# from scratch in front of the participant.
-cp "$PAYLOAD_DIR/create-controller-project.sh" /root/create-controller-project.sh
-chmod +x /root/create-controller-project.sh
+# Pre-populate the three playbooks Module 4 (Steps 2, 3 and 4) walks the
+# participant through running. All are fully self-contained and
+# idempotent (state: present everywhere, which converges an existing
+# object instead of failing on a duplicate name), so they don't depend
+# on any shell variables from earlier steps in the participant's own
+# terminal session - only on resources that already exist by the time
+# each step runs. Writing these here (rather than having the participant
+# paste large heredocs that write intermediate helper files, e.g. a
+# Python payload builder or the rulebook YAML, by hand) removes that
+# copy/paste risk the same way Step 1's Containerfile/
+# find_and_remediate.yml/vulnerability_remediation.py pre-population
+# already does - Module 4 only explains what each one does and runs it,
+# it never creates one from scratch in front of the participant.
+#
+# No chmod +x on any of them: they are playbooks run via
+# ansible-playbook, not executable scripts.
+cp "$PAYLOAD_DIR/create-satellite-credential.yml" /root/create-satellite-credential.yml
 
-cp "$PAYLOAD_DIR/wire-rulebook.sh" /root/wire-rulebook.sh
-chmod +x /root/wire-rulebook.sh
+cp "$PAYLOAD_DIR/create-controller-project.yml" /root/create-controller-project.yml
+
+cp "$PAYLOAD_DIR/wire-rulebook.yml" /root/wire-rulebook.yml
+
+# Not run directly. wire-rulebook.yml copies this into the self-hosted
+# satellite-webhook repo and commits it.
+cp "$PAYLOAD_DIR/satellite-webhook-rulebook.yml" /root/satellite-webhook-rulebook.yml

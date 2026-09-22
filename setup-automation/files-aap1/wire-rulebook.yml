@@ -1,0 +1,168 @@
+---
+# Module 4, Step 4: extend the EDA rulebook so a successful Satellite remote
+# execution job both logs the event AND launches the Job Template created in
+# Step 3, then republish the rulebook and recreate the Activation with the
+# credentials it needs.
+#
+# The rulebook itself lives beside this file as satellite-webhook-rulebook.yml.
+# It used to be a heredoc inside a single-quoted `bash -c '...'` block here,
+# where a single apostrophe anywhere - even in a comment - closed the quote
+# early and broke provisioning (see commit 6d3770d). Keeping it in its own
+# file removes that hazard entirely.
+#
+# docs/EDA_WEBHOOK_SETUP.md keeps the equivalent raw-API walkthrough, which is
+# the reference if any module below turns out to be unavailable.
+- name: Wire the rulebook to launch the remediation Job Template
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Same literal as AAP_ADMIN_PASSWORD in setup-aap1.sh - see the comment
+    # there; this file is one of the places it is hardcoded.
+    aap_admin_password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+    eda_api: https://localhost/api/eda/v1
+    repo_dir: /home/aap1-user/satellite-webhook
+    deploy_key: /home/aap1-user/.ssh/eda_project_deploy_key
+    eda_project_name: Satellite Webhook Rulebooks
+    activation_name: Satellite Webhook Activation
+  module_defaults:
+    group/ansible.eda.eda:
+      controller_host: https://localhost
+      controller_username: admin
+      controller_password: "{{ aap_admin_password }}"
+      validate_certs: false
+    # Every EDA API call not covered by a module goes through uri with the
+    # same Basic Auth.
+    ansible.builtin.uri:
+      url_username: admin
+      url_password: "{{ aap_admin_password }}"
+      force_basic_auth: true
+      validate_certs: false
+      body_format: json
+  tasks:
+    - name: Create the EDA credential the rulebook launches jobs with
+      ansible.eda.credential:
+        name: AAP Controller
+        credential_type_name: Red Hat Ansible Automation Platform
+        organization_name: Default
+        inputs:
+          host: https://localhost/api/controller/
+          username: admin
+          password: "{{ aap_admin_password }}"
+          verify_ssl: false
+        state: present
+
+    # copy, never template: the rulebook's {{ event }} references belong to
+    # ansible-rulebook and must reach the repo unrendered.
+    - name: Publish the updated rulebook into the self-hosted repo
+      ansible.builtin.copy:
+        src: /root/satellite-webhook-rulebook.yml
+        dest: "{{ repo_dir }}/rulebooks/satellite-webhook.yml"
+        owner: aap1-user
+        group: aap1-user
+        mode: '0644'
+
+    - name: Stage the rulebook
+      ansible.builtin.command:
+        cmd: git add rulebooks/satellite-webhook.yml
+        chdir: "{{ repo_dir }}"
+      become: true
+      become_user: aap1-user
+      changed_when: false
+
+    - name: Commit the rulebook
+      ansible.builtin.command:
+        cmd: git commit -m "Launch the vulnerability finder/remediator job template on success"
+        chdir: "{{ repo_dir }}"
+      become: true
+      become_user: aap1-user
+      register: r_commit
+      changed_when: "'nothing to commit' not in r_commit.stdout"
+      failed_when:
+        - r_commit.rc != 0
+        - "'nothing to commit' not in r_commit.stdout"
+
+    - name: Push it to the self-hosted remote
+      ansible.builtin.command:
+        cmd: git push aap main
+        chdir: "{{ repo_dir }}"
+      become: true
+      become_user: aap1-user
+      environment:
+        GIT_SSH_COMMAND: "ssh -i {{ deploy_key }} -o IdentitiesOnly=yes"
+      register: r_push
+      changed_when: "'Everything up-to-date' not in r_push.stderr"
+
+    - name: Find the EDA project
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/projects/?name={{ eda_project_name | urlencode }}"
+      register: r_eda_project
+
+    - name: Resync the EDA project so it picks up the new rulebook
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/projects/{{ r_eda_project.json.results[0].id }}/sync/"
+        method: POST
+        body:
+          name: "{{ eda_project_name }}"
+        status_code: [200, 201, 202, 204]
+
+    - name: Wait for the import to complete
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/projects/{{ r_eda_project.json.results[0].id }}/"
+      register: r_import
+      until: r_import.json.import_state == 'completed'
+      retries: 20
+      delay: 2
+
+    - name: Look for an existing Activation
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/activations/?name={{ activation_name | urlencode }}"
+      register: r_activation
+
+    # EDA activation deletion is asynchronous: the DELETE returns immediately
+    # while the running pod is torn down in the background. Disable it first
+    # to speed teardown, then wait until it is actually gone before creating
+    # the replacement - otherwise the create below races the delete and fails
+    # with "activation with this name already exists".
+    - name: Tear down the old Activation
+      when: r_activation.json.results | length > 0
+      block:
+        - name: Disable it
+          ansible.builtin.uri:
+            url: "{{ eda_api }}/activations/{{ r_activation.json.results[0].id }}/disable/"
+            method: POST
+            body: {}
+            status_code: [200, 201, 202, 204, 400, 409]
+
+        - name: Delete it
+          ansible.builtin.uri:
+            url: "{{ eda_api }}/activations/{{ r_activation.json.results[0].id }}/"
+            method: DELETE
+            status_code: [200, 202, 204, 404]
+
+        - name: Wait until it is really gone
+          ansible.builtin.uri:
+            url: "{{ eda_api }}/activations/?name={{ activation_name | urlencode }}"
+          register: r_gone
+          until: r_gone.json.results | length == 0
+          retries: 60
+          delay: 2
+
+    # Both credentials: the Basic Auth one from Module 3 (so the Event Stream
+    # accepts Satellite's webhook) and the AAP Controller one created above
+    # (so the rulebook can launch the Job Template).
+    - name: Recreate the Activation against the updated rulebook
+      ansible.eda.rulebook_activation:
+        name: "{{ activation_name }}"
+        project_name: "{{ eda_project_name }}"
+        rulebook_name: satellite-webhook.yml
+        decision_environment_name: Default Decision Environment
+        organization_name: Default
+        eda_credentials:
+          - Satellite Webhook Basic Auth
+          - AAP Controller
+        event_streams:
+          - event_stream: Satellite Remote Execution Webhook
+            source_name: satellite_webhook
+        enabled: true
+        state: present
