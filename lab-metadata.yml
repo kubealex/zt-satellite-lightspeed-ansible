@@ -1,14 +1,14 @@
 lab:
-  name: "Red Hat Satellite Lab"
+  name: "Red Hat Satellite Lab - Proactive Remediation"
   shortname: "zt-satellite-lightspeed-ansible"
   maintainer: "Matthew Yee (myee@redhat.com)"
 
   description:
-    summary: "This lab demonstrates the operation of the closed loop remediation process."
-    goal: "This lab demonstrates the operation of the closed loop remediation process."
+    summary: "This lab demonstrates the operation of the proactive remediation process."
+    goal: "This lab demonstrates the operation of the proactive remediation process."
     concepts:
      - "Satellite"
-    use_case: "This lab demonstrates the operation of the closed loop remediation process."
+    use_case: "This lab demonstrates the operation of the proactive remediation process."
     time_to_complete: "1 hour"
 
   git_ref:
