@@ -30,4 +30,11 @@ hammer job-invocation create \
   --search-query "name = rhel1.lab" \
   --inputs "command=echo webhook-test"
 
+# Step 3's other half: confirm the Event Stream actually received it and
+# the rulebook's rule fired. verify-webhook.yml lives on aap1.lab, not
+# here (it checks EDA's own localhost API), so this is an SSH hop, same
+# as the two read-only lookups create-webhook.yml itself makes. It is
+# read-only, so re-running it here does nothing but check.
+ssh -o StrictHostKeyChecking=no root@aap1.lab "ansible-playbook /root/verify-webhook.yml"
+
 echo "Solved module-03" >> /tmp/progress.log

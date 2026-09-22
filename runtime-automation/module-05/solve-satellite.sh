@@ -2,20 +2,26 @@
 echo "Solving module-05" >> /tmp/progress.log
 
 # This module genuinely spans three hosts (rhel1.lab, satellite.lab,
-# aap1.lab) with a STRICT ORDER that matters: check rhel1 -> trigger on
-# satellite -> poll aap1 -> check rhel1 again. runtime-automation/main.yml
-# runs every host's solve-{host}.sh for a module in parallel (there's no
-# built-in cross-host sequencing), so splitting this into separate
-# solve-rhel1.sh/solve-satellite.sh/solve-aap1.sh files would NOT
-# preserve that ordering - they'd all fire at once, and rhel1's "before"
-# check could easily run after the job already remediated it. Keeping
-# the whole sequence in one script (hopping to the other hosts via ssh)
-# is intentional here, unlike Module 4 (which has no such ordering
+# aap1.lab) with a STRICT ORDER that matters: check rhel1+rhel2 ->
+# trigger on satellite -> poll aap1 -> check rhel1+rhel2 again.
+# runtime-automation/main.yml runs every host's solve-{host}.sh for a
+# module in parallel (there's no built-in cross-host sequencing), so
+# splitting this into separate solve-rhel1.sh/solve-rhel2.sh/
+# solve-satellite.sh/solve-aap1.sh files would NOT preserve that
+# ordering - they'd all fire at once, and rhel1/rhel2's "before" checks
+# could easily run after the job already remediated them. Keeping the
+# whole sequence in one script (hopping to the other hosts via ssh) is
+# intentional here, unlike Module 4 (which has no such ordering
 # dependency and is correctly a single native solve-aap1.sh instead).
 #
-# Step 1: check the deliberately-vulnerable package versions on rhel1.lab
-# before triggering anything.
+# Step 1: check the deliberately-vulnerable package versions on BOTH
+# hosts before triggering anything. Checking only rhel1.lab would miss
+# the entire point of this module - the webhook fires from rhel1.lab,
+# but remediation is fleet-wide, so rhel2.lab (which never fires a
+# webhook of its own) has to be checked too.
 ssh -o StrictHostKeyChecking=no root@rhel1.lab \
+  "rpm -q openssl openssl-libs gnutls tar" >> /tmp/progress.log 2>&1
+ssh -o StrictHostKeyChecking=no root@rhel2.lab \
   "rpm -q openssl openssl-libs gnutls tar" >> /tmp/progress.log 2>&1
 
 # Step 2: trigger a remote execution job on Satellite - this is what
@@ -48,8 +54,19 @@ JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['
 curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/$JOB_ID/stdout/?format=txt" | tail -60
 REMOTE_EOF
 
-# Step 4: confirm the packages were actually upgraded on rhel1.lab.
+# Step 4: confirm the packages were actually upgraded, on BOTH hosts.
+# rhel2.lab never fired a webhook of its own - if only rhel1.lab shows
+# the upgrade, remediation was scoped to the trigger host instead of
+# being fleet-wide, and that is a regression this check exists to catch.
 ssh -o StrictHostKeyChecking=no root@rhel1.lab \
   "rpm -q openssl openssl-libs gnutls tar" >> /tmp/progress.log 2>&1
+ssh -o StrictHostKeyChecking=no root@rhel2.lab \
+  "rpm -q openssl openssl-libs gnutls tar" >> /tmp/progress.log 2>&1
+
+# Also run insights-client on both, the same as the module's own
+# closing steps - this is what lets Satellite's Vulnerability dashboard
+# catch up with the packages AAP just changed directly on each host.
+ssh -o StrictHostKeyChecking=no root@rhel1.lab "insights-client" >> /tmp/progress.log 2>&1
+ssh -o StrictHostKeyChecking=no root@rhel2.lab "insights-client" >> /tmp/progress.log 2>&1
 
 echo "Solved module-05" >> /tmp/progress.log
