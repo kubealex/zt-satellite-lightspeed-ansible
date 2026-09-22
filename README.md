@@ -9,6 +9,7 @@ by the module and step that uses each one.
 | File | Step | Purpose |
 | --- | --- | --- |
 | [setup-automation/files-satellite/create-webhook-template.yml](setup-automation/files-satellite/create-webhook-template.yml) | Step 1 | Registers a custom JSON webhook template with Satellite (its two built-in templates for this event either error out or emit non-JSON). |
+| [setup-automation/files-satellite/satellite-remote-execution-host-job-json.erb](setup-automation/files-satellite/satellite-remote-execution-host-job-json.erb) | Step 1 | The ERB template body itself. Not run directly; read by `create-webhook-template.yml` and POSTed to Satellite as the webhook template. |
 | [setup-automation/files-satellite/create-webhook.yml](setup-automation/files-satellite/create-webhook.yml) | Step 2 | Fetches the Basic Auth secret and the Event Stream's live URL from `aap1.lab`, then creates the Satellite webhook that points at it. |
 | [setup-automation/files-aap1/verify-webhook.yml](setup-automation/files-aap1/verify-webhook.yml) | Step 3 | Read-only. Reports the Event Stream's `events_received` counter and the Activation's own log tail, to confirm the pipeline actually fired. |
 
