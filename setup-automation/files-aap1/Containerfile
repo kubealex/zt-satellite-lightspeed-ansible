@@ -1,0 +1,6 @@
+# Custom Execution Environment: adds `uv` (needed by
+# vulnerability_remediation.py's `#!/usr/bin/env -S uv run --script`
+# shebang) on top of AAP's supported base EE image.
+FROM registry.redhat.io/ansible-automation-platform-27/ee-supported-rhel9:latest
+
+RUN pip3 install --no-cache-dir uv

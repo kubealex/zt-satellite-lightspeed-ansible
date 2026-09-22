@@ -72,6 +72,35 @@
         dest: "/tmp/setup-scripts/setup-{{ ansible_host }}.sh"
       register: r_result
 
+    - name: Check if a payload directory exists for this host
+      ansible.builtin.stat:
+        path: "./files-{{ config_host }}"
+      delegate_to: localhost
+      register: r_payload_test
+
+    # Created explicitly so the copy below creates no directories at all.
+    # That keeps mode applying only to the files, with no directory_mode
+    # ambiguity.
+    - name: Create the payload directory on the target
+      when: r_payload_test.stat.exists and r_payload_test.stat.isdir
+      ansible.builtin.file:
+        path: "/tmp/setup-scripts/files-{{ ansible_host }}/"
+        state: directory
+        mode: '0755'
+
+    # The trailing slash on src copies the directory contents, not the
+    # directory itself. mode 0644 is required, not cosmetic: this task has
+    # no become, so it runs as the bastion SSH user, and without an
+    # explicit mode the files inherit that account's umask. A 0077 umask
+    # would leave them unreadable to aap1-user, who consumes three of them.
+    - name: Copy payload files
+      when: r_payload_test.stat.exists and r_payload_test.stat.isdir
+      ansible.builtin.copy:
+        src: "./files-{{ ansible_host }}/"
+        dest: "/tmp/setup-scripts/files-{{ ansible_host }}/"
+        mode: '0644'
+        directory_mode: '0755'
+
     - name: Execute module_stage-host.sh if it exists
       when: r_script_test.stat.exists
       ansible.builtin.shell: "sh -x /tmp/setup-scripts/setup-{{ ansible_host }}.sh > /tmp/setup-scripts/setup-{{ ansible_host }}.log 2>&1"
