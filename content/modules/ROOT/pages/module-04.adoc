@@ -3,75 +3,74 @@
 == Close the Loop: Automatically Remediate Found CVEs
 
 Module 3 wired up the EDA side so that Satellite's webhook reaches a
-running rulebook. So far, that rulebook only logs the event. In this
-module you'll extend it to actually *do* something useful: whenever a
-remote execution job succeeds on a host, AAP runs a custom Python
-script, `vulnerability_remediation.py`, against Satellite to find every
-host affected by a remediable CVE and the exact RPMs each one needs,
-then installs those RPMs across *all* the affected hosts - closing the
-remediation loop end to end. A webhook from a single host is only the
-*trigger*; the remediation itself is fleet-wide, not scoped to whichever
-host happened to fire the event.
+running rulebook. So far, that rulebook only logs the event. This module
+extends it to *do* something useful. Whenever a remote execution job
+succeeds on a host, AAP runs a custom Python script,
+`vulnerability_remediation.py`, against Satellite. The script finds
+every host affected by a remediable CVE and the exact RPMs each one
+needs. AAP then installs those RPMs across *all* the affected hosts,
+closing the remediation loop end to end. A webhook from a single host is
+only the *trigger*. The remediation itself is fleet-wide, not scoped to
+whichever host happened to fire the event.
 
 `vulnerability_remediation.py` is a script written specifically for
 this lab. It logs in to `satellite.lab` and asks two of its APIs a
 question each:
 
-- *"What CVEs affect my hosts?"* - answered by Satellite's
-  **Red Hat Lightspeed > Vulnerability** page, i.e. the same dashboard
-  you'd click through in the Satellite Web UI. Even though that page's
-  API path contains `insights_cloud`, this is served *entirely
-  on-premises* by Satellite itself, from CVE/vulnerability data that
-  was already synced into Satellite during lab setup
-  (`setup-satellite.sh`'s `cvemap.xml` download) - it is **not** the
-  hosted `console.redhat.com` cloud service, and nothing about this
-  query leaves the lab network.
-- *"Which package fixes each one?"* - answered by Satellite's
+- *"What CVEs affect my hosts?"* is answered by Satellite's
+  **Red Hat Lightspeed > Vulnerability** page, the same dashboard shown
+  in the Satellite Web UI. That page's API path contains
+  `insights_cloud`, but it is served *entirely on-premises* by Satellite
+  itself, from CVE data that was already synced into Satellite during
+  lab setup (`setup-satellite.sh`'s `cvemap.xml` download). It is
+  **not** the hosted `console.redhat.com` cloud service. Nothing about
+  this query leaves the lab network.
+- *"Which package fixes each one?"* is answered by Satellite's
   documented Katello content API, which returns the exact erratum and
   RPM(s) that remediate a given CVE.
 
 [NOTE]
 ====
-By default the script reports only *Critical*- and *Important*-severity
-CVEs (`DEFAULT_SEVERITIES = ["Critical", "Important"]`), and the
-remediation playbook runs it with that default - so this lab's automated
-remediation policy is deliberately scoped to Critical and Important CVEs.
-Moderate/Low/None-rated CVEs are surfaced in the Module 2 dashboard but
-are not auto-remediated. To widen the policy you'd pass additional
+By default the script reports only CVEs rated Critical or Important
+(`DEFAULT_SEVERITIES = ["Critical", "Important"]`), and the remediation
+playbook runs it with that default. This lab's automated remediation
+policy is therefore scoped to Critical and Important CVEs. CVEs rated
+Moderate, Low, or None are surfaced in the Module 2 dashboard but are
+not auto-remediated. Widening the policy means passing additional
 `--severity` values to the script in `find_and_remediate.yml`.
 ====
 
 When scoped to a single host (`--host <hostname>`), the script narrows
-that down further: it also pulls that host's installed package list and
-compares versions, so its output is exactly the set of packages that one
-host needs - already in a form the remediation playbook can hand
-straight to Ansible's `dnf` module. The playbook uses this per-host mode
-for each affected host in turn (see Step 1).
+that down further. It also pulls that host's installed package list and
+compares versions. Its output is then exactly the set of packages that
+one host needs, in a form the remediation playbook can hand straight to
+Ansible's `dnf` module. The playbook uses this per-host mode for each
+affected host in turn (see Step 1).
 
 `rhel1.lab` and `rhel2.lab` already have a handful of deliberately
-vulnerable packages installed (seeded during lab setup) so you have
+vulnerable packages installed, seeded during lab setup. These provide
 real CVEs to remediate.
 
 [NOTE]
 ====
 Building and registering a custom Execution Environment is a routine
 AAP administration task, and this lab is not about teaching AAP
-configuration itself. That work was already done for you during lab
-setup, so this module focuses on Satellite's CVE data and Ansible's
-remediation logic instead.
+configuration itself. That work was already done during lab setup. This
+module focuses on Satellite's CVE data and Ansible's remediation logic
+instead.
 ====
 
 ======
-First, let's review the pre-populated finder and remediation files.
+First, review the pre-populated finder and remediation files.
 
 .Step 1 - Review the pre-populated finder + remediation files
 [%collapsible]
 =====
-To keep this module focused on *wiring things together* rather than on
-copy-pasting an ~800-line script by hand, three files were already
-placed on `aap1.lab` for you during lab setup, self-hosted as a git
-repo at `~/vulnerability-remediation` (same pattern as the
-`~/satellite-webhook` repo from Module 3, reusing its deploy key).
+Three files were already placed on `aap1.lab` during lab setup,
+self-hosted as a git repo at `~/vulnerability-remediation`. This is the
+same pattern as the `~/satellite-webhook` repo from Module 3, reusing
+its deploy key. It keeps this module focused on *wiring things together*
+rather than on copy-pasting an ~800-line script by hand.
 
 Click on the tab labelled `aap1.lab terminal`, then take a look:
 
@@ -80,14 +79,14 @@ Click on the tab labelled `aap1.lab terminal`, then take a look:
 sudo -u aap1-user bash -c 'ls -la ~/vulnerability-remediation'
 ----
 
-You should see three files. Here's why each one exists:
+You should see three files. Here is why each one exists:
 
 [cols="1,3"]
 |===
-| File | Why it's needed
+| File | Why it is needed
 
 | `vulnerability_remediation.py`
-| The custom script explained above - queries Satellite's on-premises
+| The custom script explained above. It queries Satellite's on-premises
   Red Hat Lightspeed Vulnerability data for CVEs, cross-references
   Satellite's Katello errata API for fixes, and (with `--host`) narrows
   that down to exactly the packages one host needs.
@@ -95,7 +94,7 @@ You should see three files. Here's why each one exists:
 | `find_and_remediate.yml`
 | The Ansible playbook the Job Template (Step 3) actually runs. A webhook
   from any single host triggers it, but it deliberately remediates *every*
-  affected host: it runs `vulnerability_remediation.py` once unscoped to
+  affected host. It runs `vulnerability_remediation.py` once unscoped to
   discover which hosts have an installable remediation, re-runs it per host
   (`--host`) to get exactly the packages each one needs, then installs them
   on every affected host via `ansible.builtin.dnf`.
@@ -104,7 +103,7 @@ You should see three files. Here's why each one exists:
 | Defines the custom Execution Environment that was already built and
   registered with Controller during lab setup. `vulnerability_remediation.py`
   needs `uv` on its `$PATH` (its `#!/usr/bin/env -S uv run --script`
-  shebang), which AAP's stock Execution Environments don't ship.
+  shebang), which AAP's stock Execution Environments do not ship.
 |===
 
 Take a look at the playbook to see exactly how the scan result feeds
@@ -118,13 +117,13 @@ sudo -u aap1-user bash -c 'cat ~/vulnerability-remediation/find_and_remediate.ym
 ======
 
 ======
-Now let's create the Satellite API credential the playbook will use.
+Next, create the Satellite API credential the playbook will use.
 
 .Step 2 - Create the Satellite API credential
 [%collapsible]
 =====
-The playbook needs Satellite admin credentials, but the rulebook
-shouldn't have to know them - a Controller credential injects them
+The playbook needs Satellite admin credentials, but the rulebook should
+not have to know them. A Controller credential injects them
 automatically whenever the Job Template runs. Still as root on
 `aap1.lab terminal`:
 
@@ -172,7 +171,7 @@ echo "CRED_ID=$CRED_ID"
 ======
 
 ======
-Then we'll create the Controller Project and Job Template.
+Then create the Controller Project and Job Template.
 
 .Step 3 - Create the Controller Project and Job Template
 [%collapsible]
@@ -205,18 +204,18 @@ Still as root on the `aap1.lab terminal` tab, run it:
 
 [NOTE]
 ====
-`ask_variables_on_launch: true` is required - it's what allows the EDA
-rulebook to pass `host_name` (the host that fired the webhook) as an
-extra var when it launches this job template in Step 4. Without it,
-Controller ignores any extra vars supplied at launch time. Note the
-playbook keeps `host_name` only for the audit trail - it remediates
-every affected host regardless of which one triggered the run.
+`ask_variables_on_launch: true` is required. It allows the EDA rulebook
+to pass `host_name` (the host that fired the webhook) as an extra var
+when it launches this job template in Step 4. Without it, Controller
+ignores any extra vars supplied at launch time. The playbook keeps
+`host_name` only for the audit trail. It remediates every affected host
+regardless of which one triggered the run.
 ====
 =====
 ======
 
 ======
-Finally, let's wire the rulebook to actually launch that Job Template.
+Finally, wire the rulebook to actually launch that Job Template.
 
 .Step 4 - Wire the rulebook to launch the Job Template
 [%collapsible]
@@ -227,14 +226,15 @@ setup. Running it does the following, in order:
 * Creates an AAP Controller credential in EDA, so the rulebook can
   authenticate to Controller's API when it launches the Job Template.
 * Extends the rulebook so that, whenever a remote execution job
-  succeeds, it both logs the event *and* launches the Job Template,
-  passing the triggering host through as an extra var (for the audit
-  trail - the playbook still remediates every affected host), then
-  pushes the updated rulebook to the self-hosted repo. Note this is done
-  by adding a second *action* to the existing success rule rather than a
-  second *rule*: ansible-rulebook's engine fires only one rule per event
-  (the first matching rule consumes it), so a separate remediation rule
-  sitting behind the catch-all log rule would never fire.
+  succeeds, it both logs the event *and* launches the Job Template. The
+  triggering host is passed through as an extra var for the audit trail,
+  and the playbook still remediates every affected host. The script then
+  pushes the updated rulebook to the self-hosted repo. This is done by
+  adding a second *action* to the existing success rule rather than a
+  second *rule*. The ansible-rulebook engine fires only one rule per
+  event, since the first matching rule consumes it. A separate
+  remediation rule sitting behind the catch-all log rule would never
+  fire.
 * Resyncs the EDA Project so it picks up that change.
 * Recreates the Activation with both credentials attached (the Basic
   Auth credential from Module 3 and the new AAP Controller

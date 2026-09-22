@@ -2,7 +2,29 @@
 
 == Introduction
 
-TODO: Introduce the lab, its goal, and what the participant will accomplish.
+This lab demonstrates proactive remediation. Red Hat Satellite detects
+the CVEs affecting managed hosts. Ansible Automation Platform (AAP) then
+remediates them automatically, without manual intervention.
+
+The lab uses three components:
+
+- *Red Hat Satellite* manages the RHEL hosts. Through its on-premises
+  *Red Hat Lightspeed Vulnerability* service, it knows which CVEs affect
+  which host and which erratum fixes each one.
+- *Event-Driven Ansible (EDA)* receives events from Satellite. It
+  determines what to run in response.
+- *AAP Controller* runs the playbook that installs the fixed packages on
+  the affected hosts.
+
+All CVE data is synced into Satellite ahead of time and served by
+Satellite itself. No host inventory or package list leaves the lab
+network. The same configuration therefore works in a disconnected
+environment.
+
+A single successful remote execution job on one host triggers the loop.
+AAP then identifies every host affected by a CVE rated Critical or
+Important. It installs the packages each host requires. This includes
+hosts that did not fire an event of their own.
 
 == Lab Environment
 
@@ -17,22 +39,30 @@ image::instances-diagram.png[]
 
 Over the course of this lab, you will:
 
-. TODO: List the high-level steps the participant will follow.
+. Log into the Satellite and AAP Web UIs.
+. Explore the CVEs Satellite has detected on `rhel1.lab` and `rhel2.lab`
+  in the on-premises Red Hat Lightspeed Vulnerability dashboard.
+. Configure a Satellite webhook that calls AAP's EDA Event Stream
+  whenever a remote execution job succeeds on a host.
+. Extend the EDA rulebook so that event launches a Job Template. The Job
+  Template finds the remediable CVEs and installs the fixes.
+. Trigger the pipeline and confirm the vulnerable packages were patched
+  on both hosts, even though only one of them fired the event.
+
+Estimated time to complete: 1 hour.
 
 == Log into the Satellite and AAP Web UIs
 
-First, we'll log into the Red Hat Satellite Web User Interface (UI).
-Satellite has been preinstalled and installation is out of scope for
-this lab.
+Start with the Red Hat Satellite Web User Interface (UI). Satellite is
+preinstalled. Its installation is out of scope for this lab.
 
 Click on the tab labelled Satellite Web UI as shown in the image below.
 
 .Satellite Web UI tab
 image::satellite-web-ui-tab.png[]
 
-You'll need the following credentials to log into the Satellite Web UI.
-
-You can copy and paste each of them below.
+Log into the Satellite Web UI with the following credentials. Copy and
+paste each of them below.
 
 [source,js]
 ----
@@ -50,7 +80,7 @@ You will be taken to the main dashboard.
 
 Next, *use the same credentials* to log into the AAP Web UI.
 
-When you are logged in, you will see the AAP Web UI. Proceed to the next module by clicking the `Next` button at the bottom of the page.
+The AAP Web UI appears once you are logged in. Proceed to the next module by clicking the `Next` button at the bottom of the page.
 
 .Next button
 image::next-button.png[]

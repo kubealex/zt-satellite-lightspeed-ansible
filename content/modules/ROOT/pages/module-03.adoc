@@ -10,47 +10,45 @@ Stream, and a running Rulebook Activation.
 
 [NOTE]
 ====
-EDA has *already* been minimally configured for you to *receive*
-webhooks, so you won't be building an EDA pipeline from scratch in this
-module. That's a deliberate choice, since this lab is meant to give you
-an end-to-end overview of how Satellite and AAP's EDA fit together to
-close the remediation loop, not to teach you every detail of
-configuring EDA itself. The one piece EDA genuinely can't do for you,
-because it lives entirely on Satellite's side, is telling Satellite to
-call that Event Stream. That's the only thing you'll configure in this
-module.
+EDA has *already* been minimally configured to *receive* webhooks, so
+this module does not build an EDA pipeline from scratch. That is a
+deliberate choice. The lab gives an end-to-end overview of how Satellite
+and AAP's EDA fit together to close the remediation loop. It does not
+teach every detail of configuring EDA itself. One piece EDA cannot do on
+its own is telling Satellite to call that Event Stream, because that
+lives entirely on Satellite's side. That is the only thing configured in
+this module.
 ====
 
-What's still missing is the other end of the pipe: *Satellite* doesn't
-know to call that Event Stream yet. In this module, you'll configure
-Satellite's webhook so that every time a remote execution job succeeds
-on a host, Satellite calls AAP's EDA Event Stream - closing the loop.
+The other end of the pipe is still missing. *Satellite* does not know to
+call that Event Stream yet. This module configures Satellite's webhook
+so that Satellite calls AAP's EDA Event Stream every time a remote
+execution job succeeds on a host. That closes the loop.
 
 image::instances-diagram.png[Lab environment instances, as defined in config/instances.yaml]
 
 .How the webhook flow works
 image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's EDA Event Stream, which delivers the event to the running rulebook Activation]
 
-. *Remote execution job succeeds* - Satellite finishes running a
-  command on a host (e.g. `rhel1.lab`) and the job reports success.
-. *Satellite -> AAP Gateway* - Satellite's Webhook fires an HTTPS POST
-  to the Event Stream's URL, authenticated with the Basic Auth
-  username/password you configure in Step 2. This request lands on
-  AAP's Gateway, the single front door for every AAP component on
-  `aap1.lab`.
-. *AAP Gateway -> EDA Event Stream* - the Gateway routes the request
+. *Remote execution job succeeds*. Satellite finishes running a command
+  on a host (e.g. `rhel1.lab`) and the job reports success.
+. *Satellite -> AAP Gateway*. Satellite's Webhook fires an HTTPS POST to
+  the Event Stream's URL, authenticated with the Basic Auth
+  username/password configured in Step 2. This request lands on AAP's
+  Gateway, the single front door for every AAP component on `aap1.lab`.
+. *AAP Gateway -> EDA Event Stream*. The Gateway routes the request
   internally to the matching `external_event_stream/<uuid>/post/`
   endpoint inside EDA.
-. *EDA validates the credentials* - the Event Stream checks the
-  request's Basic Auth against the credential it was created with. A
-  mismatch (or a stale/incorrect URL) is rejected here, before the
-  event ever reaches a rulebook.
-. *EDA Event Stream -> Activation* - once validated, EDA delivers the
-  event to the running Rulebook Activation whose source mapping links
-  to this Event Stream.
-. *Rule fires -> action runs* - the Activation's rulebook evaluates its
-  condition (currently `condition: true`, so it always matches) and
-  runs its action - right now just logging the event, which is what
+. *EDA validates the credentials*. The Event Stream checks the request's
+  Basic Auth against the credential it was created with. A mismatch (or
+  a stale/incorrect URL) is rejected here, before the event ever reaches
+  a rulebook.
+. *EDA Event Stream -> Activation*. Once validated, EDA delivers the
+  event to the running Rulebook Activation whose source mapping links to
+  this Event Stream.
+. *Rule fires -> action runs*. The Activation's rulebook evaluates its
+  condition (currently `condition: true`, so it always matches) and runs
+  its action. Right now that action only logs the event, which is what
   Step 3 checks for in the Activation's logs.
 
 [NOTE]
@@ -58,20 +56,20 @@ image::webhook-sequence-diagram.png[Sequence diagram of Satellite calling AAP's 
 The `ansible.eda.webhook` block inside the rulebook
 (`satellite-webhook.yml`) is just a placeholder name. EDA swaps it out at
 runtime for its own delivery mechanism once the rulebook's source name
-is linked to the Event Stream - you don't need to worry about it.
+is linked to the Event Stream. It requires no attention here.
 ====
 
 ======
-First, we'll create a custom JSON webhook template, since Satellite's built-in ones don't work for this event type.
+First, create a custom JSON webhook template. Satellite's built-in templates do not work for this event type.
 
 .Step 1 - Create the custom JSON webhook template
 [%collapsible]
 =====
-Satellite's built-in webhook templates don't work for this event type:
-the default "Webhook Template - Payload Default" template throws
-`undefined method '#id'`, and the other built-in "Remote Execution Host
-Job" template only emits human-readable comments, not JSON. You need a
-custom template that renders real JSON.
+Satellite's built-in webhook templates do not work for this event type.
+The default "Webhook Template - Payload Default" template throws
+`undefined method '#id'`. The other built-in "Remote Execution Host Job"
+template only emits human-readable comments, not JSON. This event type
+needs a custom template that renders real JSON.
 
 Click on the tab labelled `satellite.lab terminal` and run:
 
@@ -108,7 +106,7 @@ hammer webhook-template create \
 ======
 
 ======
-Now let's create the webhook itself, pointing it at the Event Stream.
+Next, create the webhook itself, pointing it at the Event Stream.
 
 .Step 2 - Create the webhook
 [%collapsible]
@@ -116,15 +114,14 @@ Now let's create the webhook itself, pointing it at the Event Stream.
 Still on the `satellite.lab terminal` tab, create the webhook itself.
 `aap1.lab`'s setup already generated the Basic Auth username/password
 and Event Stream URL this needs, and saved them to a file in
-`aap1-user`'s home directory - rather than logging into `aap1.lab` and
-copying those values out by hand, this writes a small script that
-fetches them itself, live, over SSH to `aap1.lab` - that also sidesteps
-the Event Stream
-URL/UUID going stale if the Basic Auth credential is touched again
-later (a copied value would fail with `{"detail":"bad uuid specified"}`
-in that case; a freshly-fetched one never can). Everything below is a
-single command block that writes the script, makes it executable, and
-runs it:
+`aap1-user`'s home directory. Rather than logging into `aap1.lab` and
+copying those values out by hand, the block below writes a small script
+that fetches them live over SSH to `aap1.lab`. Fetching them also
+sidesteps the Event Stream URL/UUID going stale if the Basic Auth
+credential is touched again later. A copied value would fail with
+`{"detail":"bad uuid specified"}` in that case. A freshly fetched one
+never can. Everything below is a single command block that writes the
+script, makes it executable, and runs it:
 
 [source,bash,role="execute"]
 ----
@@ -144,9 +141,9 @@ chmod +x ~/create-webhook.sh
 ----
 
 The script prints `WEBHOOK_USER=...` and `EVENT_STREAM_URL=...` before
-creating the webhook, so you can immediately tell if either SSH lookup
-came back empty instead of finding out only after `hammer webhook
-create` fails.
+creating the webhook. An empty value there identifies a failed SSH
+lookup immediately, rather than only after `hammer webhook create`
+fails.
 
 [IMPORTANT]
 ====
@@ -159,7 +156,7 @@ as shown above.
 ======
 
 ======
-Finally, let's verify the whole pipeline fires end-to-end.
+Finally, verify the whole pipeline fires end to end.
 
 .Step 3 - Verify end-to-end
 [%collapsible]
@@ -173,9 +170,9 @@ hammer job-invocation create --job-template "Run Command - Ansible Default" --se
 ----
 
 Now switch back to the `aap1.lab terminal` tab and check that the Event
-Stream received it and the rulebook's rule fired. This writes a small
-script that looks up the Event Stream's counters, then the Activation's
-latest log output, and runs it, all as one command block:
+Stream received it and the rulebook's rule fired. The block below writes
+a small script and runs it, all in one step. The script looks up the
+Event Stream's counters, then the Activation's latest log output:
 
 [source,bash,role="execute"]
 ----
@@ -197,8 +194,8 @@ chmod +x ~/verify-webhook.sh
 
 `events_received` should have gone up by one, and `last_event_received_at`
 should show the current time. The script also prints `ACTIVATION_ID` and
-`INSTANCE_ID` before using them, so a broken lookup is visible
-immediately instead of the final log tail silently coming back empty.
+`INSTANCE_ID` before using them. A broken lookup is therefore visible
+immediately, instead of the final log tail silently coming back empty.
 
 You should see a line like:
 
@@ -207,21 +204,21 @@ You should see a line like:
 Received Satellite webhook: {'payload': {'host_name': 'rhel1.lab', 'task_result': 'success', ...}, 'meta': {...}}
 ----
 
-Here's an example of the output you should see on the `aap1.lab` terminal:
+Here is an example of the output on the `aap1.lab` terminal:
 
 .Webhook output on `aap1.lab` terminal
 image::webhook-metadata-received.png[]
 
-If you see that line with the current timestamp, congratulations - the
-Satellite-to-AAP EDA webhook pipeline is fully wired up end to end.
+That line with the current timestamp confirms the Satellite to AAP EDA
+webhook pipeline is fully wired up end to end.
 
 [TIP]
 ====
-If `events_received` didn't increase, check
-`/var/log/foreman/production.log` on `satellite.lab` around the time you
-ran the job for lines containing `EventSubscriber` or `webhook`. A Ruby
+If `events_received` did not increase, check
+`/var/log/foreman/production.log` on `satellite.lab` around the time the
+job ran, for lines containing `EventSubscriber` or `webhook`. A Ruby
 exception there usually means the webhook *template* is misconfigured
-for this event type - double-check Step 1.
+for this event type. Double-check Step 1.
 ====
 =====
 ======
