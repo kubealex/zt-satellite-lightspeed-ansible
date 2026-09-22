@@ -248,9 +248,47 @@ Lightspeed. Ansible then installed the exact packages needed to fix them
 on *every* affected host, including `rhel2.lab`, which never fired a
 webhook of its own. None of it required manual intervention.
 
-Back in Satellite's *Red Hat Lightspeed -> Vulnerability* dashboard, the
-CVE rated Important from Step 1 is gone. *CVEs with critical severity*
-and *CVEs with important severity* both read *0*, and the OpenSSL CVE that
+Satellite's Vulnerability dashboard will not agree yet. The two views
+read from different places. `rpm -q` queries the local RPM database on
+each host, so it changes the instant the AAP job finishes. The dashboard
+reads Satellite's own copy of each host's package inventory, and nothing
+has told Satellite that the packages changed. AAP patched the hosts
+directly. It did not report back to Satellite.
+
+`insights-client` is what closes that gap. It collects the host's current
+package list, uploads it to Satellite, and Satellite re-runs its CVE
+matching against the new data. It already runs on a schedule, so the
+dashboard would catch up on its own eventually. Running it by hand makes
+that happen now.
+
+On the `rhel1.lab terminal` tab:
+
+[source,bash,role="execute"]
+----
+insights-client
+----
+
+Then on the `rhel2.lab terminal` tab:
+
+[source,bash,role="execute"]
+----
+insights-client
+----
+
+Run it on *both* hosts. The OpenSSL CVE showed *Systems Affected = 2*, so
+Satellite only clears it once both hosts have uploaded an updated package
+list. Refreshing only `rhel1.lab` leaves the CVE on the dashboard with
+*Systems Affected = 1*, which looks like a partial remediation but is
+really just stale inventory.
+
+Each run takes up to a minute. It prints its collection progress and
+finishes with a line confirming the upload succeeded. If it exits with an
+error instead, the dashboard will not update, so re-run it before moving
+on.
+
+Now reload the *Red Hat Lightspeed -> Vulnerability* dashboard. The CVE
+rated Important from Step 1 is gone. *CVEs with critical severity* and
+*CVEs with important severity* both read *0*, and the OpenSSL CVE that
 previously affected two systems no longer appears in the list.
 
 .Vulnerability dashboard after remediation, with no Critical or Important CVEs remaining
@@ -258,12 +296,10 @@ image::vulnerabilities-after-remediation.png[Vulnerability dashboard showing zer
 
 [NOTE]
 ====
-The Vulnerability dashboard only reflects the fix once each host
-re-reports its package inventory to Satellite. `insights-client` does
-this on a schedule, so there can be a short delay between the AAP job
-finishing and the dashboard clearing. Running `insights-client` on each
-host forces an immediate refresh. The `rpm -q` output above, by
-contrast, changes the moment the AAP job completes.
+If the CVE is still listed right after both uploads finish, wait a minute
+and reload again. The upload and Satellite's CVE re-match are separate
+steps, so the dashboard can lag slightly behind a successful
+`insights-client` run.
 ====
 
 [NOTE]
