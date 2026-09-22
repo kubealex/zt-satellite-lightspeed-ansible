@@ -1,5 +1,5 @@
 lab:
-  name: "Red Hat Satellite Lab - Proactive Remediation"
+  name: "Red Hat Satellite Proactive Remediation"
   shortname: "zt-satellite-lightspeed-ansible"
   maintainer: "Matthew Yee (myee@redhat.com)"
 
