@@ -343,18 +343,25 @@
     # take credentials inline on the job template itself - they are associated
     # through this sub-endpoint, which no-ops on an already-attached id.
     #
-    # The | int is required. Every other id in this playbook is a relation
-    # field that Controller coerces from a string, but this one is a plain
-    # IntegerField, and a templated "{{ ... }}" arrives as the string "3":
+    # The body is a hand-written JSON string, not a dict, and that is
+    # deliberate. Every other id in this playbook goes to a DRF relation
+    # field, which coerces a numeric string happily. This one is a plain
+    # IntegerField and rejects it:
     #
     #   Status code was 400: {"msg": "\"id\" field must be an integer."}
+    #
+    # A dict body cannot produce an integer here. Ansible renders any
+    # "{{ ... }}" to a string unless jinja2_native is on, and `| int` does
+    # not change that - it yields the string "3" just the same. uri, on the
+    # other hand, documents that a string body under body_format: json is
+    # passed through as pre-formatted JSON, so `{"id": 3}` reaches Controller
+    # with the 3 unquoted.
     - name: Attach the Satellite API and Machine credentials
       ansible.builtin.uri:
         url: "{{ controller_api }}/job_templates/{{ job_template_id }}/credentials/"
         method: POST
-        body:
-          id: "{{ item | int }}"
+        body: '{"id": {{ item | int }} }'
         status_code: [201, 204]
       loop:
-        - "{{ r_sat_cred.json.results[0].id | int }}"
-        - "{{ machine_credential_id | int }}"
+        - "{{ r_sat_cred.json.results[0].id }}"
+        - "{{ machine_credential_id }}"
