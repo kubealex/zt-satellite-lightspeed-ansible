@@ -1,0 +1,81 @@
+---
+- name: Find CVE remediations for every affected host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    # A remote-execution success on ANY single host triggers this job, but
+    # we deliberately remediate EVERY affected host, not just the one that
+    # triggered the webhook. The triggering host_name (if passed) is only
+    # kept for the audit trail; it is not used to scope the work.
+    #
+    # Step 1: an unscoped scan to discover which hosts have at least one
+    # installable remediation. Without --host the report lists, per CVE,
+    # has_remediation plus the affected_systems it applies to.
+    - name: Scan Satellite for all remediable CVEs and the hosts they affect
+      ansible.builtin.command:
+        cmd: >-
+          python3 vulnerability_remediation.py
+          --satellite https://satellite.lab
+          --username {{ satellite_username }}
+          --insecure
+        chdir: "{{ playbook_dir }}"
+      register: scan_all
+      changed_when: false
+
+    - name: Parse the report
+      ansible.builtin.set_fact:
+        all_remediations: "{{ scan_all.stdout | from_json }}"
+
+    - name: Build the set of hosts with at least one installable remediation
+      ansible.builtin.set_fact:
+        target_hosts: >-
+          {{ all_remediations
+             | selectattr("has_remediation", "defined")
+             | selectattr("has_remediation")
+             | map(attribute="affected_systems")
+             | sum(start=[])
+             | unique }}
+
+    # Step 2: re-scan each affected host WITH --host so the report narrows
+    # to exactly the packages that host needs (correct version comparison).
+    - name: Re-scan each affected host for the exact packages it needs
+      ansible.builtin.command:
+        cmd: >-
+          python3 vulnerability_remediation.py
+          --satellite https://satellite.lab
+          --username {{ satellite_username }}
+          --host {{ item }}
+          --insecure
+        chdir: "{{ playbook_dir }}"
+      loop: "{{ target_hosts }}"
+      register: per_host_scans
+      changed_when: false
+
+    - name: Hand each affected host + its own package list to the next play
+      ansible.builtin.add_host:
+        name: "{{ item.item }}"
+        groups: affected_hosts
+        packages_to_install: >-
+          {{ (item.stdout | from_json)
+             | selectattr("packages_to_install_on_host", "defined")
+             | map(attribute="packages_to_install_on_host")
+             | select("truthy")
+             | sum(start=[])
+             | unique }}
+      loop: "{{ per_host_scans.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+- name: Install the fixed packages on every affected host
+  hosts: affected_hosts
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Install/upgrade each package that remediates a found CVE
+      ansible.builtin.dnf:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ hostvars[inventory_hostname].packages_to_install }}"
+      register: install_results
+      when: hostvars[inventory_hostname].packages_to_install | length > 0

@@ -71,11 +71,12 @@ The default "Webhook Template - Payload Default" template throws
 template only emits human-readable comments, not JSON. This event type
 needs a custom template that renders real JSON.
 
-Click on the tab labelled `satellite.lab terminal` and run:
+The template is an ERB file, and it was placed on `satellite.lab` during
+lab setup as `/root/satellite-remote-execution-host-job-json.erb`. This
+is the payload Satellite will POST to AAP on every successful job:
 
-[source,bash,role="execute"]
+[source,erb]
 ----
-cat > /tmp/satellite-remote-execution-host-job-json.erb <<'EOF'
 <%#
 name: Satellite Remote Execution Host Job JSON
 description: JSON payload for actions.remote_execution.run_host_job_succeeded.event.foreman
@@ -94,14 +95,26 @@ payload({
   task_ended_at: @object.task.ended_at
 })
 -%>
-EOF
-
-TEMPLATE_CONTENT=$(cat /tmp/satellite-remote-execution-host-job-json.erb)
-hammer webhook-template create \
-  --name "Satellite Remote Execution Host Job JSON" \
-  --template "$TEMPLATE_CONTENT" \
-  --snippet false
 ----
+
+`host_name` is the field that matters most. It is what the rulebook
+passes on to AAP in Module 4 as the host that triggered remediation.
+
+A playbook that registers this template with Satellite was also
+pre-populated during lab setup, at `/root/create-webhook-template.yml`.
+It reads the ERB above and creates the webhook template through
+Satellite's API.
+
+Click on the tab labelled `satellite.lab terminal` and run it:
+
+[source,bash,role="execute"]
+----
+ansible-playbook /root/create-webhook-template.yml
+----
+
+Re-running it is safe. If the template already exists, the playbook
+updates it in place rather than failing on a duplicate name the way
+`hammer webhook-template create` does.
 =====
 ======
 
@@ -111,46 +124,46 @@ Next, create the webhook itself, pointing it at the Event Stream.
 .Step 2 - Create the webhook
 [%collapsible]
 =====
-Still on the `satellite.lab terminal` tab, create the webhook itself.
-`aap1.lab`'s setup already generated the Basic Auth username/password
-and Event Stream URL this needs, and saved them to a file in
-`aap1-user`'s home directory. Rather than logging into `aap1.lab` and
-copying those values out by hand, the block below writes a small script
-that fetches them live over SSH to `aap1.lab`. Fetching them also
-sidesteps the Event Stream URL/UUID going stale if the Basic Auth
-credential is touched again later. A copied value would fail with
-`{"detail":"bad uuid specified"}` in that case. A freshly fetched one
-never can. Everything below is a single command block that writes the
-script, makes it executable, and runs it:
+The webhook needs three things `satellite.lab` does not have locally:
+the Basic Auth username and password AAP's Event Stream expects, and
+that Event Stream's URL. `aap1.lab`'s setup already generated all three,
+saving the credentials to a file in `aap1-user`'s home directory.
+
+Rather than logging into `aap1.lab` and copying those values out by
+hand, `/root/create-webhook.yml` (pre-populated during lab setup)
+fetches them live and then creates the webhook. In order, it:
+
+* Reads the Basic Auth secret file from `aap1-user@aap1.lab` over SSH.
+* Asks EDA's API for the Event Stream's *current* URL, rather than
+  trusting the cached copy in that same secret file. The URL's UUID can
+  drift if the Basic Auth credential is touched again later, and a stale
+  one fails with `{"detail":"bad uuid specified"}`. A freshly fetched one
+  cannot.
+* Prints both values before using them, so a failed lookup is obvious
+  immediately rather than only once Satellite rejects the webhook.
+* Creates the webhook, attaching the template from Step 1 and subscribing
+  it to the remote execution success event.
+
+Still on the `satellite.lab terminal` tab, run it:
 
 [source,bash,role="execute"]
 ----
-cat > ~/create-webhook.sh <<'SCRIPT_EOF'
-#!/bin/bash
-set -e
-EDA_SECRET=$(ssh -o StrictHostKeyChecking=no aap1-user@aap1.lab "cat ~/.eda_webhook_basic_auth.json")
-WEBHOOK_USER=$(echo "$EDA_SECRET" | python3 -c "import sys,json;print(json.load(sys.stdin)['username'])")
-WEBHOOK_PASS=$(echo "$EDA_SECRET" | python3 -c "import sys,json;print(json.load(sys.stdin)['password'])")
-EVENT_STREAM_URL=$(ssh -o StrictHostKeyChecking=no aap1-user@aap1.lab "curl -sk -u 'admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702' 'https://localhost/api/eda/v1/event-streams/?name=Satellite%20Remote%20Execution%20Webhook'" | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['url'])")
-echo "WEBHOOK_USER=$WEBHOOK_USER"
-echo "EVENT_STREAM_URL=$EVENT_STREAM_URL"
-hammer webhook create --name "AAP Event Driven Ansible Webhook" --target-url "$EVENT_STREAM_URL" --http-method POST --http-content-type "application/json" --event "actions.remote_execution.run_host_job_succeeded" --webhook-template "Satellite Remote Execution Host Job JSON" --user "$WEBHOOK_USER" --password "$WEBHOOK_PASS" --verify-ssl false --enabled true
-SCRIPT_EOF
-chmod +x ~/create-webhook.sh
-~/create-webhook.sh
+ansible-playbook /root/create-webhook.yml
 ----
 
-The script prints `WEBHOOK_USER=...` and `EVENT_STREAM_URL=...` before
-creating the webhook. An empty value there identifies a failed SSH
-lookup immediately, rather than only after `hammer webhook create`
-fails.
+Re-running it is safe, and is in fact the repair for a stale Event
+Stream URL: the freshly fetched URL and credentials overwrite whatever
+the existing webhook was carrying.
 
 [IMPORTANT]
 ====
-The `--event` value has *no* `.event.foreman` suffix on input, even
-though `hammer webhook info` will display it *with* that suffix
-afterward. Use `actions.remote_execution.run_host_job_succeeded` exactly
-as shown above.
+The event name is a common source of confusion here.
+`hammer webhook create --event` takes
+`actions.remote_execution.run_host_job_succeeded` with *no*
+`.event.foreman` suffix, even though `hammer webhook info` displays it
+*with* that suffix afterward. The playbook sidesteps the guess by asking
+Satellite's `/api/webhooks/events` endpoint for its own spelling of the
+event and using whichever name it reports.
 ====
 =====
 ======
@@ -170,34 +183,22 @@ hammer job-invocation create --job-template "Run Command - Ansible Default" --se
 ----
 
 Now switch back to the `aap1.lab terminal` tab and check that the Event
-Stream received it and the rulebook's rule fired. The block below writes
-a small script and runs it, all in one step. The script looks up the
-Event Stream's counters, then the Activation's latest log output:
+Stream received it and the rulebook's rule fired.
+`/root/verify-webhook.yml` (pre-populated during lab setup) looks up the
+Event Stream's counters, then tails the Activation's latest log output:
 
 [source,bash,role="execute"]
 ----
-cat > ~/verify-webhook.sh <<'SCRIPT_EOF'
-#!/bin/bash
-set -e
-export EDA_API="https://localhost/api/eda/v1"
-export EDA_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
-curl -sk -u "$EDA_AUTH" "$EDA_API/event-streams/?name=Satellite%20Remote%20Execution%20Webhook" | python3 -c "import sys,json; d=json.load(sys.stdin)['results'][0]; print('events_received:', d['events_received']); print('last_event_received_at:', d['last_event_received_at'])"
-ACTIVATION_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/?name=Satellite%20Webhook%20Activation" | python3 -c "import sys,json; print(json.load(sys.stdin)['results'][0]['id'])")
-echo "ACTIVATION_ID=$ACTIVATION_ID"
-INSTANCE_ID=$(curl -sk -u "$EDA_AUTH" "$EDA_API/activations/$ACTIVATION_ID/" | python3 -c "import sys,json; print(json.load(sys.stdin)['instances'][0]['id'])")
-echo "INSTANCE_ID=$INSTANCE_ID"
-curl -sk -u "$EDA_AUTH" "$EDA_API/activation-instances/$INSTANCE_ID/logs/" | tail -c 2000
-SCRIPT_EOF
-chmod +x ~/verify-webhook.sh
-~/verify-webhook.sh
+ansible-playbook /root/verify-webhook.yml
 ----
 
 `events_received` should have gone up by one, and `last_event_received_at`
-should show the current time. The script also prints `ACTIVATION_ID` and
-`INSTANCE_ID` before using them. A broken lookup is therefore visible
-immediately, instead of the final log tail silently coming back empty.
+should show the current time. The playbook is read-only, so run it as
+many times as it takes for the event to land. If any of the objects it
+looks up is missing, it stops with a message naming which one, instead
+of the log tail silently coming back empty.
 
-You should see a line like:
+In the log tail you should see a line like:
 
 [source,js]
 ----

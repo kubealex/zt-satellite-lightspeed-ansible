@@ -1,0 +1,27 @@
+---
+- name: Satellite Remote Execution Webhook
+  hosts: all
+  sources:
+    - ansible.eda.webhook:
+        host: 127.0.0.1
+        port: 5000
+      name: satellite_webhook
+  rules:
+    # NOTE: this is deliberately ONE rule with TWO actions, not two rules.
+    # The ansible-rulebook drools engine fires at most ONE rule per event
+    # (first matching rule wins, then the event is consumed), so a separate
+    # catch-all "condition: true" logging rule listed first would swallow
+    # every event and the remediation rule below it would never fire. Running
+    # both the debug log and the job-template launch as two actions of a
+    # single success-scoped rule is the correct way to make both happen.
+    - name: Log Satellite remote execution success and remediate CVEs
+      condition: event.payload.task_result == "success"
+      actions:
+        - debug:
+            msg: "Received Satellite webhook: {{ event }}"
+        - run_job_template:
+            name: "Vulnerability Package Finder and Remediator"
+            organization: "Default"
+            job_args:
+              extra_vars:
+                host_name: "{{ event.payload.host_name }}"

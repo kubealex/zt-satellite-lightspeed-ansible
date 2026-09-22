@@ -6,10 +6,8 @@ echo "Solving module-04" >> /tmp/progress.log
 # the rulebook/Activation update are all aap1-side).
 # runtime-automation/main.yml already runs this file directly as root on
 # aap1 (it's in the "aap1" node loop), so no SSH hop is needed here,
-# unlike module-03's solve-satellite.sh (Configure the Satellite
-# Webhook) which genuinely does need one
-# (satellite.lab has its own real work: creating the webhook template
-# and webhook).
+# unlike module-03 (Configure the Satellite Webhook), which runs on
+# satellite.lab and reaches over to aap1.lab for two read-only lookups.
 #
 # vulnerability_remediation.py itself (a custom script that queries
 # Satellite's on-premises Red Hat Lightspeed Vulnerability service for
@@ -27,34 +25,16 @@ sudo -u aap1-user test -f /home/aap1-user/vulnerability-remediation/vulnerabilit
 # Controller by setup-automation/setup-aap1.sh (either pre-baked into
 # the aap1-* golden image, or built there as a fallback) - nothing to
 # do here for it.
-export CTRL_API="https://localhost/api/controller/v2"
-export CTRL_AUTH="admin:bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 
-CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credential_types/?name=Satellite%20API%20Credentials" \
-  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
-if [ -z "$CRED_TYPE_ID" ]; then
-  CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credential_types/" \
-    -H "Content-Type: application/json" \
-    -d '{"name": "Satellite API Credentials", "kind": "cloud", "inputs": {"fields": [{"id": "username", "type": "string", "label": "Username"}, {"id": "password", "type": "string", "label": "Password", "secret": true}], "required": ["username", "password"]}, "injectors": {"extra_vars": {"satellite_username": "{{ username }}"}, "env": {"SATELLITE_PASSWORD": "{{ password }}"}}}' \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-fi
-
-CRED_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credentials/?name=Satellite%20Admin%20(API)" \
-  | python3 -c "import sys,json; r=json.load(sys.stdin)['results']; print(r[0]['id'] if r else '')")
-if [ -z "$CRED_ID" ]; then
-  CRED_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credentials/" \
-    -H "Content-Type: application/json" \
-    -d "{\"name\": \"Satellite Admin (API)\", \"organization\": 1, \"credential_type\": $CRED_TYPE_ID, \"inputs\": {\"username\": \"admin\", \"password\": \"bc31c9a6-9ff0-11ec-9587-00155d1b0702\"}}" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
-fi
-
-# Steps 3 and 4 of module-04.adoc (Controller Project/Job Template, EDA
-# Controller credential, rulebook update, Activation recreation) are
-# exactly what these two scripts do - setup-automation/setup-aap1.sh
-# already pre-populated them as /root/*.sh (self-contained and
-# idempotent), so re-run them here too rather than duplicating ~150
-# lines of the same curl/python3 logic a second time in this file.
-/root/create-controller-project.sh
-/root/wire-rulebook.sh
+# Steps 2, 3 and 4 of module-04.adoc (the Satellite API credential type
+# and credential; the Controller Project/Job Template; the EDA
+# Controller credential, rulebook update and Activation recreation) are
+# exactly what these three playbooks do - setup-automation/setup-aap1.sh
+# already pre-populated them under /root (self-contained and
+# idempotent), so re-run them here too rather than duplicating ~170
+# lines of the same API logic a second time in this file.
+ansible-playbook /root/create-satellite-credential.yml
+ansible-playbook /root/create-controller-project.yml
+ansible-playbook /root/wire-rulebook.yml
 
 echo "Solved module-04" >> /tmp/progress.log

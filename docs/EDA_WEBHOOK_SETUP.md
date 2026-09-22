@@ -350,6 +350,12 @@ done
 
 Run as root (`sudo -i`) on `satellite.lab`.
 
+> Module 3 no longer runs these `hammer` commands. Both steps below are
+> done by `setup-automation/files-satellite/create-webhook-template.yml`
+> and `create-webhook.yml`, pre-populated under `/root` during
+> provisioning. This section stays as the reference walkthrough, and as
+> the fallback if those playbooks cannot be run.
+
 ### 1. Create the custom JSON webhook template
 
 The built-in "Webhook Template - Payload Default" throws
@@ -550,7 +556,7 @@ network. It then cross-references that against Satellite's documented
 Katello content API to find the exact erratum/package that fixes each
 CVE, and - when scoped to one host via `--host` - narrows that down to
 exactly the packages that host needs. The full script is tracked in
-this repo at `runtime-automation/module-04/vulnerability_remediation.py`,
+this repo at `setup-automation/files-aap1/vulnerability_remediation.py`,
 and pre-populated onto `aap1.lab` by `setup-automation/setup-aap1.sh`
 (see step 1 below).
 
@@ -583,9 +589,9 @@ Verify it's there instead of creating it:
 sudo -u aap1-user bash -c 'ls -la ~/vulnerability-remediation'
 ```
 
-See `setup-automation/setup-aap1.sh`'s step 8 in this repo for the exact
-content of all three files, or `runtime-automation/module-04/vulnerability_remediation.py`
-for the script standalone.
+All three files are tracked in this repo at
+`setup-automation/files-aap1/`. `setup-automation/setup-aap1.sh`'s step 8
+copies them into place.
 
 ### 2. The custom Execution Environment is already built and registered
 
@@ -624,7 +630,14 @@ usually skips straight to the push/register.
 ### 3. Create the Satellite API credential (Controller)
 
 Injects the Satellite username/password into the playbook automatically
-- the rulebook never needs to know them:
+- the rulebook never needs to know them.
+
+The lab itself no longer does this with `curl`: `setup-aap1.sh`
+pre-populates `/root/create-satellite-credential.yml`
+(`setup-automation/files-aap1/create-satellite-credential.yml`), an
+`ansible.controller.credential_type` + `ansible.controller.credential`
+playbook that Module 4's Step 2 runs. The raw API calls are kept here as
+the reference walkthrough:
 
 ```bash
 CRED_TYPE_ID=$(curl -sk -u "$CTRL_AUTH" "$CTRL_API/credential_types/?name=Satellite%20API%20Credentials" \
@@ -648,6 +661,12 @@ CRED_ID=$(curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/credentials/" \
 ```
 
 ### 4. Create the Controller Project and Job Template
+
+The lab itself no longer does this with `curl`: `setup-aap1.sh`
+pre-populates `/root/create-controller-project.yml`
+(`setup-automation/files-aap1/create-controller-project.yml`), an
+`ansible.controller` playbook that Module 4's Step 3 runs. The raw API
+calls are kept here as the reference walkthrough:
 
 ```bash
 # Reuse the SAME deploy key as the SCM credential.
@@ -706,6 +725,14 @@ curl -sk -u "$CTRL_AUTH" -X POST "$CTRL_API/job_templates/$JT_ID/credentials/" \
 > in step 5 below.
 
 ### 5. Wire the rulebook to launch the Job Template
+
+The lab itself no longer does this with `curl`: `setup-aap1.sh`
+pre-populates `/root/wire-rulebook.yml` and the rulebook it publishes,
+`/root/satellite-webhook-rulebook.yml`
+(`setup-automation/files-aap1/`), which Module 4's Step 4 runs. The raw
+API calls below remain the reference walkthrough - and the fallback, if
+the `ansible.eda` modules that playbook relies on turn out to be
+unavailable.
 
 Add an "AAP Controller" credential to EDA so it can call Controller's
 launch API:

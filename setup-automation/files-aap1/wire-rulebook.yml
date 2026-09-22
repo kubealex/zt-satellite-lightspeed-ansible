@@ -1,0 +1,353 @@
+---
+# Module 4, Step 4: extend the EDA rulebook so a successful Satellite remote
+# execution job both logs the event AND launches the Job Template created in
+# Step 3, then republish the rulebook and recreate the Activation with the
+# credentials it needs.
+#
+# The rulebook itself lives beside this file as satellite-webhook-rulebook.yml.
+# It used to be a heredoc inside a single-quoted `bash -c '...'` block here,
+# where a single apostrophe anywhere - even in a comment - closed the quote
+# early and broke provisioning (see commit 6d3770d). Keeping it in its own
+# file removes that hazard entirely.
+#
+# EDA's REST API is called through ansible.builtin.uri rather than the
+# ansible.eda collection, for the same reason the module-04 playbooks avoid
+# ansible.controller: the collection is not installed on aap1.lab's control
+# node - it ships inside AAP's execution environment images - and a
+# `group/ansible.eda.eda` module_defaults block fails at parse time, before a
+# single task runs:
+#
+#   ERROR! Error loading module_defaults: could not resolve the
+#   module_defaults group ansible.eda.eda
+#
+# docs/EDA_WEBHOOK_SETUP.md keeps the equivalent raw-API walkthrough, which is
+# the reference if any call below needs to be made by hand.
+- name: Wire the rulebook to launch the remediation Job Template
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Same literal as AAP_ADMIN_PASSWORD in setup-aap1.sh - see the comment
+    # there; this file is one of the places it is hardcoded.
+    aap_admin_password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+    eda_api: https://localhost/api/eda/v1
+    repo_dir: /home/aap1-user/satellite-webhook
+    deploy_key: /home/aap1-user/.ssh/eda_project_deploy_key
+    eda_project_name: Satellite Webhook Rulebooks
+    activation_name: Satellite Webhook Activation
+    rulebook_file_name: satellite-webhook.yml
+    controller_credential_name: AAP Controller
+    aap_credential_type_name: Red Hat Ansible Automation Platform
+    webhook_credential_name: Satellite Webhook Basic Auth
+    event_stream_name: Satellite Remote Execution Webhook
+    decision_environment_name: Default Decision Environment
+    organization_name: Default
+    source_name: satellite_webhook
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: admin
+      url_password: "{{ aap_admin_password }}"
+      force_basic_auth: true
+      validate_certs: false
+      body_format: json
+  tasks:
+    # The REST API takes ids, not names, so the lookups the ansible.eda
+    # modules did implicitly are explicit here.
+    #
+    # EDA's ?name= is a substring match, not the exact filter Controller's
+    # ?name= is: /organizations/?name=Def returns "Default". So every lookup
+    # below is narrowed by the query and then re-matched exactly, and only the
+    # resulting scalar id is kept - a list or dict put through set_fact is not
+    # guaranteed to survive as a structure.
+    - name: Look up the organization and the AAP credential type
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/{{ item.path }}/?name={{ item.name | urlencode }}"
+      loop:
+        - path: organizations
+          name: "{{ organization_name }}"
+        - path: credential-types
+          name: "{{ aap_credential_type_name }}"
+      register: r_base
+
+    - name: Pin them to the exactly-named objects
+      ansible.builtin.set_fact:
+        organization_id: "{{ r_base.results[0].json.results | selectattr('name', 'equalto', organization_name) | map(attribute='id') | first | default('') }}"
+        credential_type_id: "{{ r_base.results[1].json.results | selectattr('name', 'equalto', aap_credential_type_name) | map(attribute='id') | first | default('') }}"
+
+    - name: Fail clearly if either is missing
+      ansible.builtin.assert:
+        that:
+          - organization_id | length > 0
+          - credential_type_id | length > 0
+        fail_msg: >-
+          EDA has no "{{ organization_name }}" organization, or no
+          "{{ aap_credential_type_name }}" credential type. Provisioning did
+          not complete.
+
+    - name: Look up the Controller credential
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/eda-credentials/?name={{ controller_credential_name | urlencode }}"
+      register: r_ctrl_cred
+
+    - name: Note its id if it is already there
+      ansible.builtin.set_fact:
+        existing_controller_credential_id: >-
+          {{ r_ctrl_cred.json.results
+             | selectattr('name', 'equalto', controller_credential_name)
+             | map(attribute='id') | first | default('') }}
+
+    # Bodies that carry an id are handed to uri as a pre-formatted JSON string
+    # built with to_json, not as a dict. Ansible renders a dict value of
+    # "{{ ... }}" to a string, so an id would arrive quoted and EDA's integer
+    # fields would reject it - the same trap create-controller-project.yml hit
+    # on job_templates/N/credentials/. Inside a single to_json expression the
+    # types survive, so the ids serialise as numbers.
+    - name: Create the EDA credential the rulebook launches jobs with
+      when: existing_controller_credential_id | length == 0
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/eda-credentials/"
+        method: POST
+        body: >-
+          {{ {'name': controller_credential_name,
+              'credential_type_id': credential_type_id | int,
+              'organization_id': organization_id | int,
+              'inputs': {'host': 'https://localhost/api/controller/',
+                         'username': 'admin',
+                         'password': aap_admin_password,
+                         'verify_ssl': false}} | to_json }}
+        status_code: [200, 201]
+
+    - name: Refresh its inputs in place if it is already there
+      when: existing_controller_credential_id | length > 0
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/eda-credentials/{{ existing_controller_credential_id }}/"
+        method: PATCH
+        body: >-
+          {{ {'inputs': {'host': 'https://localhost/api/controller/',
+                         'username': 'admin',
+                         'password': aap_admin_password,
+                         'verify_ssl': false}} | to_json }}
+        status_code: [200]
+
+    # copy, never template: the rulebook's {{ event }} references belong to
+    # ansible-rulebook and must reach the repo unrendered.
+    - name: Publish the updated rulebook into the self-hosted repo
+      ansible.builtin.copy:
+        src: /root/satellite-webhook-rulebook.yml
+        dest: "{{ repo_dir }}/rulebooks/satellite-webhook.yml"
+        owner: aap1-user
+        group: aap1-user
+        mode: '0644'
+
+    - name: Stage the rulebook
+      ansible.builtin.command:
+        cmd: git add rulebooks/satellite-webhook.yml
+        chdir: "{{ repo_dir }}"
+      become: true
+      become_user: aap1-user
+      changed_when: false
+
+    - name: Commit the rulebook
+      ansible.builtin.command:
+        cmd: git commit -m "Launch the vulnerability finder/remediator job template on success"
+        chdir: "{{ repo_dir }}"
+      become: true
+      become_user: aap1-user
+      register: r_commit
+      changed_when: "'nothing to commit' not in r_commit.stdout"
+      failed_when:
+        - r_commit.rc != 0
+        - "'nothing to commit' not in r_commit.stdout"
+
+    - name: Push it to the self-hosted remote
+      ansible.builtin.command:
+        cmd: git push aap main
+        chdir: "{{ repo_dir }}"
+      become: true
+      become_user: aap1-user
+      environment:
+        GIT_SSH_COMMAND: "ssh -i {{ deploy_key }} -o IdentitiesOnly=yes"
+      register: r_push
+      changed_when: "'Everything up-to-date' not in r_push.stderr"
+
+    - name: Find the EDA project
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/projects/?name={{ eda_project_name | urlencode }}"
+      register: r_eda_project
+
+    - name: Pin it to the exactly-named project
+      ansible.builtin.set_fact:
+        eda_project_id: >-
+          {{ r_eda_project.json.results
+             | selectattr('name', 'equalto', eda_project_name)
+             | map(attribute='id') | first | default('') }}
+
+    - name: Fail clearly if it is missing
+      ansible.builtin.assert:
+        that: eda_project_id | length > 0
+        fail_msg: >-
+          EDA has no "{{ eda_project_name }}" project. It is created during
+          provisioning by setup-automation/setup-aap1.sh.
+
+    - name: Resync the EDA project so it picks up the new rulebook
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/projects/{{ eda_project_id }}/sync/"
+        method: POST
+        body:
+          name: "{{ eda_project_name }}"
+        status_code: [200, 201, 202, 204]
+
+    - name: Wait for the import to complete
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/projects/{{ eda_project_id }}/"
+      register: r_import
+      until: r_import.json.import_state == 'completed'
+      retries: 20
+      delay: 2
+
+    - name: Look for an existing Activation
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/activations/?name={{ activation_name | urlencode }}"
+      register: r_activation
+
+    - name: Pin it to the exactly-named Activation
+      ansible.builtin.set_fact:
+        existing_activation_id: >-
+          {{ r_activation.json.results
+             | selectattr('name', 'equalto', activation_name)
+             | map(attribute='id') | first | default('') }}
+
+    # EDA activation deletion is asynchronous: the DELETE returns immediately
+    # while the running pod is torn down in the background. Disable it first
+    # to speed teardown, then wait until it is actually gone before creating
+    # the replacement - otherwise the create below races the delete and fails
+    # with "activation with this name already exists".
+    - name: Tear down the old Activation
+      when: existing_activation_id | length > 0
+      block:
+        - name: Disable it
+          ansible.builtin.uri:
+            url: "{{ eda_api }}/activations/{{ existing_activation_id }}/disable/"
+            method: POST
+            body: {}
+            status_code: [200, 201, 202, 204, 400, 409]
+
+        - name: Delete it
+          ansible.builtin.uri:
+            url: "{{ eda_api }}/activations/{{ existing_activation_id }}/"
+            method: DELETE
+            status_code: [200, 202, 204, 404]
+
+        - name: Wait until it is really gone
+          ansible.builtin.uri:
+            url: "{{ eda_api }}/activations/?name={{ activation_name | urlencode }}"
+          register: r_gone
+          until: r_gone.json.results | selectattr('name', 'equalto', activation_name) | list | length == 0
+          retries: 60
+          delay: 2
+
+    # Looked up after the import above, so this is the rulebook as just
+    # republished rather than the copy the old Activation was built on.
+    # Narrowed to this project as well as this name: the filename is only
+    # unique within a project, and EDA returns every project's copy.
+    - name: Find the rulebook the Activation will run
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/rulebooks/?name={{ rulebook_file_name | urlencode }}"
+      register: r_rulebook
+
+    # Only the two scalars are carried forward, never the rulebook dict
+    # itself, so nothing depends on Ansible round-tripping a structure
+    # through set_fact.
+    #
+    # rulebook_hash is the sha256 of the rulebook's own rulesets text, which
+    # is what /rulebooks/ returns - confirmed by reproducing the hash of an
+    # Activation EDA had built itself.
+    - name: Take the id and content hash of the copy in this project
+      when: match | length > 0
+      vars:
+        match: >-
+          {{ r_rulebook.json.results
+             | selectattr('name', 'equalto', rulebook_file_name)
+             | selectattr('project_id', 'equalto', eda_project_id | int)
+             | list }}
+      ansible.builtin.set_fact:
+        rulebook_id: "{{ match[0].id }}"
+        rulebook_hash: "{{ match[0].rulesets | hash('sha256') }}"
+
+    - name: Look up the decision environment and the event stream
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/{{ item.path }}/?name={{ item.name | urlencode }}"
+      loop:
+        - path: decision-environments
+          name: "{{ decision_environment_name }}"
+        - path: event-streams
+          name: "{{ event_stream_name }}"
+      register: r_eda_objects
+
+    # Re-read after the create above, so this picks up a credential that did
+    # not exist when r_ctrl_cred was registered.
+    - name: Look up both credentials the Activation needs
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/eda-credentials/?name={{ item | urlencode }}"
+      loop:
+        - "{{ webhook_credential_name }}"
+        - "{{ controller_credential_name }}"
+      register: r_act_creds
+
+    - name: Pin each lookup to the exactly-named object
+      ansible.builtin.set_fact:
+        decision_environment_id: "{{ r_eda_objects.results[0].json.results | selectattr('name', 'equalto', decision_environment_name) | map(attribute='id') | first | default('') }}"
+        event_stream_id: "{{ r_eda_objects.results[1].json.results | selectattr('name', 'equalto', event_stream_name) | map(attribute='id') | first | default('') }}"
+        webhook_credential_id: "{{ r_act_creds.results[0].json.results | selectattr('name', 'equalto', webhook_credential_name) | map(attribute='id') | first | default('') }}"
+        controller_credential_id: "{{ r_act_creds.results[1].json.results | selectattr('name', 'equalto', controller_credential_name) | map(attribute='id') | first | default('') }}"
+
+    - name: Fail clearly if anything the Activation needs is missing
+      ansible.builtin.assert:
+        that:
+          - rulebook_id is defined
+          - decision_environment_id | length > 0
+          - event_stream_id | length > 0
+          - webhook_credential_id | length > 0
+          - controller_credential_id | length > 0
+        fail_msg: >-
+          Missing one of: the {{ rulebook_file_name }} rulebook in the
+          "{{ eda_project_name }}" project, the
+          "{{ decision_environment_name }}" decision environment, the
+          "{{ event_stream_name }}" event stream, or one of the two
+          credentials. The first three come from provisioning; the Event
+          Stream is created in Module 3.
+
+    # EDA validates source_mappings against the rulebook the Activation is
+    # pinned to, and rejects the mapping outright if a key is absent:
+    #
+    #   The source mapping {...} is missing the required keys:
+    #   ['event_stream_name', 'rulebook_hash']
+    - name: Assemble the source mapping
+      ansible.builtin.set_fact:
+        source_mappings: >-
+          {{ [{'source_name': source_name,
+               'event_stream_id': event_stream_id | int,
+               'event_stream_name': event_stream_name,
+               'rulebook_hash': rulebook_hash}] | to_json }}
+
+    # Both credentials: the Basic Auth one from Module 3 (so the Event Stream
+    # accepts Satellite's webhook) and the AAP Controller one created above
+    # (so the rulebook can launch the Job Template).
+    #
+    # source_mappings is itself a string field holding JSON, so it is passed
+    # through to_json twice over - once for the mapping, once for the body.
+    - name: Recreate the Activation against the updated rulebook
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/activations/"
+        method: POST
+        body: >-
+          {{ {'name': activation_name,
+              'project_id': eda_project_id | int,
+              'rulebook_id': rulebook_id | int,
+              'decision_environment_id': decision_environment_id | int,
+              'organization_id': organization_id | int,
+              'eda_credentials': [webhook_credential_id | int, controller_credential_id | int],
+              'source_mappings': source_mappings,
+              'is_enabled': true,
+              'restart_policy': 'on-failure'} | to_json }}
+        status_code: [200, 201]

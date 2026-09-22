@@ -1,0 +1,184 @@
+---
+# Module 3, Step 2: point Satellite's webhook at AAP's EDA Event Stream.
+#
+# The Basic Auth username/password and the Event Stream URL were both
+# generated on aap1.lab by setup-automation/setup-aap1.sh. Rather than
+# making the participant log into aap1.lab and copy them across by hand,
+# this playbook fetches them live.
+#
+# Fetching the URL - instead of reading the cached `event_stream_url`
+# field in that same secret file - also sidesteps the UUID going stale
+# if the Basic Auth credential is touched again later. A stale URL fails
+# with {"detail":"bad uuid specified"}. A freshly fetched one cannot.
+#
+# As in create-webhook-template.yml, Foreman's REST API is used directly
+# so that nothing beyond ansible-core has to be installed on Satellite.
+- name: Register aap1.lab as an SSH target for the two lookups below
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    # aap1-user, not root: the secret file lives in that account's home.
+    # setup-aap1.sh copied root's authorized_keys into aap1-user's, so
+    # satellite.lab's root can log straight in with no password.
+    - name: Add aap1
+      ansible.builtin.add_host:
+        name: aap1
+        ansible_host: aap1.lab
+        ansible_user: aap1-user
+        ansible_connection: ssh
+        ansible_ssh_common_args: -o StrictHostKeyChecking=no
+        ansible_host_key_checking: false
+        ansible_python_interpreter: auto_silent
+
+- name: Create the webhook pointing at the Event Stream
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # One literal, two services: Satellite's admin password and AAP's
+    # are the same value in this lab. See setup-aap1.sh for the full
+    # list of places it is hardcoded.
+    satellite_admin_password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+    aap_admin_password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+    satellite_api: https://satellite.lab/api
+    # Reached over the SSH hop to aap1, so this is aap1's own localhost.
+    eda_api: https://localhost/api/eda/v1
+    event_stream_name: Satellite Remote Execution Webhook
+    template_name: Satellite Remote Execution Host Job JSON
+    webhook_name: AAP Event Driven Ansible Webhook
+    secret_file: /home/aap1-user/.eda_webhook_basic_auth.json
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: admin
+      url_password: "{{ satellite_admin_password }}"
+      force_basic_auth: true
+      validate_certs: false
+      body_format: json
+  tasks:
+    - name: Read the Basic Auth secret generated on aap1.lab
+      ansible.builtin.slurp:
+        src: "{{ secret_file }}"
+      delegate_to: aap1
+      register: r_secret
+
+    - name: Pull the username and password out of it
+      ansible.builtin.set_fact:
+        webhook_user: "{{ (r_secret.content | b64decode | from_json).username }}"
+        webhook_pass: "{{ (r_secret.content | b64decode | from_json).password }}"
+
+    - name: Ask EDA for the Event Stream's current URL
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/event-streams/?name={{ event_stream_name | urlencode }}"
+        url_password: "{{ aap_admin_password }}"
+      delegate_to: aap1
+      register: r_stream
+
+    - name: Keep it
+      ansible.builtin.set_fact:
+        event_stream_url: "{{ r_stream.json.results[0].url }}"
+      when: r_stream.json.results | length > 0
+
+    # Printed before the webhook is created, so a failed lookup is
+    # obvious here rather than only once Satellite rejects the webhook.
+    - name: Show what the lookups found
+      ansible.builtin.debug:
+        msg:
+          - "WEBHOOK_USER={{ webhook_user | default('') }}"
+          - "EVENT_STREAM_URL={{ event_stream_url | default('') }}"
+
+    - name: Fail clearly if either lookup came back empty
+      ansible.builtin.assert:
+        that:
+          - webhook_user | default('') | length > 0
+          - webhook_pass | default('') | length > 0
+          - event_stream_url | default('') | length > 0
+        fail_msg: >-
+          Could not read the Basic Auth secret and/or the Event Stream
+          URL from aap1.lab. Check that {{ secret_file }} exists there
+          and that the "{{ event_stream_name }}" Event Stream is present
+          in EDA.
+
+    - name: Find the webhook template created in Step 1
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhook_templates?per_page=1000"
+      register: r_templates
+
+    - name: Keep its id
+      ansible.builtin.set_fact:
+        template_id: "{{ r_templates.json.results | selectattr('name', 'equalto', template_name) | map(attribute='id') | list | first | default('') }}"
+
+    - name: Fail clearly if Step 1 has not been run yet
+      ansible.builtin.assert:
+        that: template_id | string | length > 0
+        fail_msg: >-
+          The "{{ template_name }}" webhook template does not exist yet.
+          Run create-webhook-template.yml (Step 1) first.
+
+    # `hammer webhook create` takes the event without its `.event.foreman`
+    # suffix but displays it afterward with one, so the spelling the API
+    # wants is not obvious. Ask Satellite for its own list instead of
+    # hardcoding a guess, and fall back to the short form if this
+    # Satellite release does not expose that endpoint.
+    - name: Ask Satellite which webhook events it knows about
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhooks/events"
+        status_code: [200, 404]
+      register: r_events
+
+    - name: Use Satellite's own spelling of the remote execution success event
+      ansible.builtin.set_fact:
+        webhook_event: >-
+          {{ (r_events.json | default([], true)
+              | select('search', 'run_host_job_succeeded') | list | first)
+             | default('actions.remote_execution.run_host_job_succeeded', true) }}
+
+    - name: List the webhooks Satellite already has
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhooks?per_page=1000"
+      register: r_webhooks
+
+    - name: Find ours among them
+      ansible.builtin.set_fact:
+        webhook_exists: "{{ r_webhooks.json.results | selectattr('name', 'equalto', webhook_name) | list | length > 0 }}"
+        webhook_id: "{{ r_webhooks.json.results | selectattr('name', 'equalto', webhook_name) | map(attribute='id') | list | first | default('') }}"
+
+    - name: Create it
+      when: not webhook_exists
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhooks"
+        method: POST
+        body:
+          webhook:
+            name: "{{ webhook_name }}"
+            target_url: "{{ event_stream_url }}"
+            http_method: POST
+            http_content_type: application/json
+            event: "{{ webhook_event }}"
+            webhook_template_id: "{{ template_id }}"
+            user: "{{ webhook_user }}"
+            password: "{{ webhook_pass }}"
+            verify_ssl: false
+            enabled: true
+        status_code: [200, 201]
+
+    # Re-running this step is safe, and is in fact the repair for a
+    # stale Event Stream UUID: the freshly fetched URL and credentials
+    # overwrite whatever the webhook was carrying.
+    - name: Update it in place if it is already there
+      when: webhook_exists
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhooks/{{ webhook_id }}"
+        method: PUT
+        body:
+          webhook:
+            target_url: "{{ event_stream_url }}"
+            http_method: POST
+            http_content_type: application/json
+            event: "{{ webhook_event }}"
+            webhook_template_id: "{{ template_id }}"
+            user: "{{ webhook_user }}"
+            password: "{{ webhook_pass }}"
+            verify_ssl: false
+            enabled: true
+        status_code: [200]
