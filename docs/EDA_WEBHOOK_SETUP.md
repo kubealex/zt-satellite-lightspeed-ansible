@@ -550,7 +550,7 @@ network. It then cross-references that against Satellite's documented
 Katello content API to find the exact erratum/package that fixes each
 CVE, and - when scoped to one host via `--host` - narrows that down to
 exactly the packages that host needs. The full script is tracked in
-this repo at `runtime-automation/module-04/vulnerability_remediation.py`,
+this repo at `setup-automation/files-aap1/vulnerability_remediation.py`,
 and pre-populated onto `aap1.lab` by `setup-automation/setup-aap1.sh`
 (see step 1 below).
 
@@ -583,9 +583,9 @@ Verify it's there instead of creating it:
 sudo -u aap1-user bash -c 'ls -la ~/vulnerability-remediation'
 ```
 
-See `setup-automation/setup-aap1.sh`'s step 8 in this repo for the exact
-content of all three files, or `runtime-automation/module-04/vulnerability_remediation.py`
-for the script standalone.
+All three files are tracked in this repo at
+`setup-automation/files-aap1/`. `setup-automation/setup-aap1.sh`'s step 8
+copies them into place.
 
 ### 2. The custom Execution Environment is already built and registered
 

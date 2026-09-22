@@ -55,9 +55,10 @@ sed -i 's/^download_updates.*/download_updates = no/' /etc/dnf/automatic.conf
 # AAP application admin password from the aap1-* golden image, not the
 # aap1-user OS account password. It matches Satellite's admin password.
 #
-# Changing it here is not enough. The same literal is hardcoded in the
-# generated /root/*.sh below, the module .adocs, and the solve scripts,
-# all inside single-quoted heredocs that cannot reference this variable.
+# Changing it here is not enough. The same literal is hardcoded in
+# files-aap1/create-controller-project.sh, files-aap1/wire-rulebook.sh,
+# the module .adocs, and the solve scripts, none of which can reference
+# this variable.
 AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 
 # Pre-authenticate root's podman against registry.redhat.io so Module 4

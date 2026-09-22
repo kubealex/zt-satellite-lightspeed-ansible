@@ -28,11 +28,14 @@ print(json.dumps({
 fi
 echo "CTRL_CRED_ID=$CTRL_CRED_ID"
 
-# CAUTION: the block below is one big single-quoted "bash -c" string, and it is
-# emitted verbatim into /root/wire-rulebook.sh by the quoted heredoc above. Do
-# not use an apostrophe anywhere inside it - not even in a comment - or it will
-# close the quote early and the rest of the block will be parsed as stray
-# commands (symptom: "drools: line N" errors and an unterminated RULEBOOK_EOF).
+# CAUTION: the block below is one big single-quoted "bash -c" string. Do not use
+# an apostrophe anywhere inside it - not even in a comment - or it will close the
+# quote early and the rest of the block will be parsed as stray commands
+# (symptom: "drools: line N" errors and an unterminated RULEBOOK_EOF).
+#
+# This file used to be a heredoc inside setup-aap1.sh, where that mistake broke
+# provisioning. It now breaks only this script, at Module 4 runtime, in front of
+# a participant. Running `bash -n` on this file catches it earlier than either.
 sudo -u aap1-user bash -c '
 cd ~/satellite-webhook
 cat > rulebooks/satellite-webhook.yml <<RULEBOOK_EOF
