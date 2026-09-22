@@ -350,6 +350,12 @@ done
 
 Run as root (`sudo -i`) on `satellite.lab`.
 
+> Module 3 no longer runs these `hammer` commands. Both steps below are
+> done by `setup-automation/files-satellite/create-webhook-template.yml`
+> and `create-webhook.yml`, pre-populated under `/root` during
+> provisioning. This section stays as the reference walkthrough, and as
+> the fallback if those playbooks cannot be run.
+
 ### 1. Create the custom JSON webhook template
 
 The built-in "Webhook Template - Payload Default" throws

@@ -1,0 +1,92 @@
+---
+# Module 3, Step 1: register the custom JSON webhook template with
+# Satellite.
+#
+# Satellite's built-in webhook templates do not work for this event
+# type. "Webhook Template - Payload Default" throws
+# `undefined method '#id'`, and "Remote Execution Host Job" only emits
+# human-readable comments rather than JSON.
+#
+# Foreman's REST API is used directly rather than the theforeman.foreman
+# collection, because that collection is not guaranteed to be installed
+# on the Satellite server itself - ansible-core is (Satellite's Ansible
+# remote execution provider needs it). Nothing here needs more than
+# ansible.builtin.
+#
+# The ERB itself ships beside this file as
+# satellite-remote-execution-host-job-json.erb, so the participant never
+# has to paste it by hand. It is read with lookup('file') rather than
+# rendered as a template: its `<%= %>` markers belong to Foreman's ERB
+# renderer and must reach Satellite untouched.
+- name: Create the custom JSON webhook template
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Same literal as AAP_ADMIN_PASSWORD in setup-aap1.sh - Satellite's
+    # admin password matches it. See the comment there for the full list
+    # of places it is hardcoded.
+    satellite_admin_password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+    satellite_api: https://satellite.lab/api
+    template_name: Satellite Remote Execution Host Job JSON
+    template_file: /root/satellite-remote-execution-host-job-json.erb
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: admin
+      url_password: "{{ satellite_admin_password }}"
+      force_basic_auth: true
+      validate_certs: false
+      body_format: json
+  tasks:
+    - name: Check that the ERB payload is where it should be
+      ansible.builtin.stat:
+        path: "{{ template_file }}"
+      register: r_erb
+
+    - name: Fail clearly if it is not
+      ansible.builtin.assert:
+        that: r_erb.stat.exists and r_erb.stat.size > 0
+        fail_msg: >-
+          {{ template_file }} is missing or empty. It is placed there by
+          setup-automation/setup-satellite.sh during provisioning.
+
+    - name: List the webhook templates Satellite already has
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhook_templates?per_page=1000"
+      register: r_templates
+
+    # Matching in Jinja rather than through Satellite's ?search= syntax
+    # keeps a template name full of spaces and quotes out of the URL.
+    # A bool and a scalar id, rather than the matched object itself, so
+    # nothing here depends on Ansible round-tripping a list of dicts
+    # through its string representation.
+    - name: Find ours among them
+      ansible.builtin.set_fact:
+        template_exists: "{{ r_templates.json.results | selectattr('name', 'equalto', template_name) | list | length > 0 }}"
+        template_id: "{{ r_templates.json.results | selectattr('name', 'equalto', template_name) | map(attribute='id') | list | first | default('') }}"
+
+    - name: Create it
+      when: not template_exists
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhook_templates"
+        method: POST
+        body:
+          webhook_template:
+            name: "{{ template_name }}"
+            template: "{{ lookup('ansible.builtin.file', template_file) }}"
+            snippet: false
+        status_code: [200, 201]
+
+    # Re-running this step is safe: an existing template is updated in
+    # place instead of failing the way `hammer webhook-template create`
+    # does on a duplicate name.
+    - name: Update it in place if it is already there
+      when: template_exists
+      ansible.builtin.uri:
+        url: "{{ satellite_api }}/webhook_templates/{{ template_id }}"
+        method: PUT
+        body:
+          webhook_template:
+            template: "{{ lookup('ansible.builtin.file', template_file) }}"
+            snippet: false
+        status_code: [200]

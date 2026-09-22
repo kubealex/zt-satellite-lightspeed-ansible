@@ -6,10 +6,8 @@ echo "Solving module-04" >> /tmp/progress.log
 # the rulebook/Activation update are all aap1-side).
 # runtime-automation/main.yml already runs this file directly as root on
 # aap1 (it's in the "aap1" node loop), so no SSH hop is needed here,
-# unlike module-03's solve-satellite.sh (Configure the Satellite
-# Webhook) which genuinely does need one
-# (satellite.lab has its own real work: creating the webhook template
-# and webhook).
+# unlike module-03 (Configure the Satellite Webhook), which runs on
+# satellite.lab and reaches over to aap1.lab for two read-only lookups.
 #
 # vulnerability_remediation.py itself (a custom script that queries
 # Satellite's on-premises Red Hat Lightspeed Vulnerability service for

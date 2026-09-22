@@ -1,0 +1,81 @@
+---
+# Module 3, Step 3: confirm the Event Stream received Satellite's
+# webhook and that the rulebook's rule fired.
+#
+# Read-only. It creates nothing and is safe to run as many times as it
+# takes for the event to land.
+- name: Verify the Satellite to EDA webhook pipeline
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    # Same literal as AAP_ADMIN_PASSWORD in setup-aap1.sh - see the
+    # comment there; this file is one of the places it is hardcoded.
+    aap_admin_password: bc31c9a6-9ff0-11ec-9587-00155d1b0702
+    eda_api: https://localhost/api/eda/v1
+    event_stream_name: Satellite Remote Execution Webhook
+    activation_name: Satellite Webhook Activation
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: admin
+      url_password: "{{ aap_admin_password }}"
+      force_basic_auth: true
+      validate_certs: false
+      body_format: json
+  tasks:
+    - name: Read the Event Stream's counters
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/event-streams/?name={{ event_stream_name | urlencode }}"
+      register: r_stream
+
+    - name: Fail clearly if the Event Stream is missing
+      ansible.builtin.assert:
+        that: r_stream.json.results | length > 0
+        fail_msg: >-
+          No Event Stream named "{{ event_stream_name }}" exists in EDA.
+          It is created during provisioning by
+          setup-automation/setup-aap1.sh.
+
+    - name: Show how many events it has taken, and when the last one arrived
+      ansible.builtin.debug:
+        msg:
+          - "events_received: {{ r_stream.json.results[0].events_received }}"
+          - "last_event_received_at: {{ r_stream.json.results[0].last_event_received_at }}"
+
+    - name: Find the Activation
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/activations/?name={{ activation_name | urlencode }}"
+      register: r_activation
+
+    - name: Fail clearly if the Activation is missing
+      ansible.builtin.assert:
+        that: r_activation.json.results | length > 0
+        fail_msg: >-
+          No Activation named "{{ activation_name }}" exists in EDA.
+
+    - name: Find its running instance
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/activations/{{ r_activation.json.results[0].id }}/"
+      register: r_detail
+
+    - name: Fail clearly if it has never started
+      ansible.builtin.assert:
+        that: r_detail.json.instances | default([]) | length > 0
+        fail_msg: >-
+          The "{{ activation_name }}" Activation has no instances, which
+          means it never started. Check its status in the AAP Web UI.
+
+    - name: Read that instance's log
+      ansible.builtin.uri:
+        url: "{{ eda_api }}/activation-instances/{{ r_detail.json.instances[0].id }}/logs/"
+      register: r_logs
+
+    - name: Show the tail of it
+      when: r_logs.json.results is defined
+      ansible.builtin.debug:
+        msg: "{{ (r_logs.json.results | map(attribute='log') | list)[-25:] }}"
+
+    - name: Show the raw response instead if the log is not paginated
+      when: r_logs.json.results is not defined
+      ansible.builtin.debug:
+        var: r_logs.json

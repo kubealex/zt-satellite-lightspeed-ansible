@@ -1,5 +1,36 @@
 #!/bin/bash
 
+# This script runs as root on satellite.lab (via setup-automation/main.yml).
+# It resets Satellite back to a clean slate, syncs the CVE map, registers
+# the two RHEL hosts with deliberately vulnerable packages, and
+# pre-populates the two playbooks Module 3's Steps 1 and 2 walk the
+# participant through running.
+#
+# Those playbooks ship alongside this script as real files, in
+# setup-automation/files-satellite/, copied here by
+# setup-automation/main.yml. This script has no `set -e`, so a missing
+# payload would fail silently and Module 3 would hand the participant a
+# nonexistent playbook. Fail up front instead, before anything on this
+# host has been touched.
+PAYLOAD_DIR=/tmp/setup-scripts/files-satellite
+for _f in create-webhook-template.yml create-webhook.yml \
+          satellite-remote-execution-host-job-json.erb; do
+  if [ ! -s "$PAYLOAD_DIR/$_f" ]; then
+    echo "==> SETUP-SATELLITE: FAILED - missing or empty payload $PAYLOAD_DIR/$_f" >&2
+    exit 1
+  fi
+done
+unset _f
+
+# Those two playbooks use nothing beyond ansible.builtin, so ansible-core
+# is the only requirement - no collections to install. Satellite's
+# Ansible remote execution provider already pulls it in, so this is a
+# no-op on a healthy box and a safety net on an older image.
+if ! command -v ansible-playbook >/dev/null 2>&1; then
+  echo "==> SETUP-SATELLITE: ansible-core missing, installing it"
+  dnf install -y ansible-core
+fi
+
 # Unregister Satellite server from itself.
 subscription-manager unregister
 
@@ -11,8 +42,11 @@ hammer host delete --name satellite.lab
 # idempotent.
 hammer activation-key delete --name "RHEL10" --organization "Acme Org" || true
 
-# Module 3 creates these two, and hammer rejects duplicate names here
-# too. Delete the webhook first. It references the template.
+# Module 3 creates these two. Its playbooks converge an existing object
+# rather than failing on a duplicate name, so this is no longer required
+# for idempotence - it is here to give every (re)provision the same
+# clean slate, with no webhook left pointing at a previous lab's Event
+# Stream. Delete the webhook first. It references the template.
 hammer webhook delete --name "AAP Event Driven Ansible Webhook" || true
 hammer webhook-template delete --name "Satellite Remote Execution Host Job JSON" || true
 
@@ -54,3 +88,20 @@ ssh root@rhel1.lab "dnf install -y tar-1.35-8.el10_1 --allowerasing 2>/dev/null 
 # upload insights data
 ssh root@rhel1.lab "insights-client"
 ssh root@rhel2.lab "insights-client"
+
+# Pre-populate the two playbooks Module 3 (Steps 1 and 2) walks the
+# participant through running, the same way setup-aap1.sh does for
+# Module 4. Both are self-contained and idempotent, so they don't depend
+# on any shell variables from earlier steps in the participant's own
+# terminal session. Writing them here removes the copy/paste risk of
+# having the participant paste a heredoc that writes a helper script.
+#
+# No chmod +x on either: they are playbooks run via ansible-playbook,
+# not executable scripts.
+cp "$PAYLOAD_DIR/create-webhook-template.yml" /root/create-webhook-template.yml
+cp "$PAYLOAD_DIR/create-webhook.yml" /root/create-webhook.yml
+
+# Not run directly. create-webhook-template.yml reads this and POSTs its
+# contents to Satellite as the template body.
+cp "$PAYLOAD_DIR/satellite-remote-execution-host-job-json.erb" \
+   /root/satellite-remote-execution-host-job-json.erb

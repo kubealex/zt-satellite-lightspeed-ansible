@@ -1,0 +1,18 @@
+<%#
+name: Satellite Remote Execution Host Job JSON
+description: JSON payload for actions.remote_execution.run_host_job_succeeded.event.foreman
+snippet: false
+model: WebhookTemplate
+-%>
+<%=
+payload({
+  host_name: @object.host_name,
+  host_id: @object.host_id,
+  job_invocation_id: @object.job_invocation_id,
+  task_label: @object.task.label,
+  task_state: @object.task.state,
+  task_result: @object.task.result,
+  task_started_at: @object.task.started_at,
+  task_ended_at: @object.task.ended_at
+})
+-%>

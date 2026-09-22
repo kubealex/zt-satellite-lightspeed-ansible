@@ -5,8 +5,9 @@
 # aap1-* golden image - this script wires up the Satellite -> EDA
 # webhook pipeline (self-hosted rulebook repo, EDA credentials,
 # Project, Event Stream, Activation), the registry.redhat.io pre-auth
-# and vulnerability-remediation repo Module 4 needs, and the three
-# helpers Module 4's Steps 2/3/4 walk the participant through running.
+# and vulnerability-remediation repo Module 4 needs, and the playbooks
+# Module 3's Step 3 and Module 4's Steps 2/3/4 walk the participant
+# through running.
 # Idempotent: every step here is safe to run again on every
 # (re)provision.
 #
@@ -17,8 +18,8 @@
 # setup-automation/files-aap1/, copied here by setup-automation/main.yml:
 # the whole aap1-user half of setup (setup-as-aap1-user.sh), the
 # vulnerability finder, the remediation playbook, the Containerfile,
-# Module 4's three /root playbooks, and the EDA rulebook the third of
-# them publishes.
+# Module 3's verify playbook, Module 4's three /root playbooks, and the
+# EDA rulebook the third of them publishes.
 #
 # This script has no `set -e`, so a missing payload would fail silently
 # and we would go on to git-commit and push a repo with files missing.
@@ -28,6 +29,7 @@
 PAYLOAD_DIR=/tmp/setup-scripts/files-aap1
 for _f in setup-as-aap1-user.sh \
           Containerfile find_and_remediate.yml vulnerability_remediation.py \
+          verify-webhook.yml \
           create-satellite-credential.yml create-controller-project.yml \
           wire-rulebook.yml satellite-webhook-rulebook.yml; do
   if [ ! -s "$PAYLOAD_DIR/$_f" ]; then
@@ -60,10 +62,12 @@ sed -i 's/^download_updates.*/download_updates = no/' /etc/dnf/automatic.conf
 # aap1-user OS account password. It matches Satellite's admin password.
 #
 # Changing it here is not enough. The same literal is hardcoded in
+# files-aap1/verify-webhook.yml,
 # files-aap1/create-satellite-credential.yml,
 # files-aap1/create-controller-project.yml, files-aap1/wire-rulebook.yml,
-# the module .adocs, and the solve scripts, none of which can reference
-# this variable.
+# files-satellite/create-webhook-template.yml,
+# files-satellite/create-webhook.yml, the module .adocs, and the solve
+# scripts, none of which can reference this variable.
 AAP_ADMIN_PASSWORD="bc31c9a6-9ff0-11ec-9587-00155d1b0702"
 
 # Pre-authenticate root's podman against registry.redhat.io so Module 4
@@ -223,3 +227,9 @@ cp "$PAYLOAD_DIR/wire-rulebook.yml" /root/wire-rulebook.yml
 # Not run directly. wire-rulebook.yml copies this into the self-hosted
 # satellite-webhook repo and commits it.
 cp "$PAYLOAD_DIR/satellite-webhook-rulebook.yml" /root/satellite-webhook-rulebook.yml
+
+# Module 3, Step 3's read-only end-to-end check. It belongs here rather
+# than in files-satellite/ because the participant runs it on the
+# aap1.lab terminal tab: it queries EDA's API, which listens on this
+# host.
+cp "$PAYLOAD_DIR/verify-webhook.yml" /root/verify-webhook.yml
