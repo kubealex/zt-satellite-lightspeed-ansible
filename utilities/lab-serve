@@ -1,15 +1,103 @@
 #!/usr/bin/env bash
 #
+# Serve the built site in ./www for local preview.
+#
+# Usage: utilities/lab-serve [start|stop|restart|status]
+#        No argument is the same as "start".
 
-echo "Starting server process..."
-# TODO: Add case statement to allow stopping, starting, and restarting
-# TODO: Add logic to detect both podman and docker, if both are installed, use podman as default "first found"
-# TODO: Move to RHEL image
+set -euo pipefail
 
-# Check if podman exists, otherwise use docker
-CONTAINER_CMD="docker"
-if command -v podman &> /dev/null; then
-    CONTAINER_CMD="podman"
+CONTAINER_NAME="showroom-httpd"
+HOST_PORT="8443"
+
+# Resolve ./www against the repo root, not the caller's cwd.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SITE_DIR="${REPO_ROOT}/www"
+
+# RHEL-based replacement for docker.io/httpd:2.4. It serves from
+# /var/www/html on port 8080 as a non-root user. The upstream image
+# served from /usr/local/apache2/htdocs on port 80 as root.
+IMAGE="registry.access.redhat.com/ubi9/httpd-24"
+CONTAINER_DOCROOT="/var/www/html"
+CONTAINER_PORT="8080"
+
+# Prefer podman when both are installed.
+CONTAINER_CMD=""
+for candidate in podman docker; do
+    if command -v "$candidate" &> /dev/null; then
+        CONTAINER_CMD="$candidate"
+        break
+    fi
+done
+if [ -z "$CONTAINER_CMD" ]; then
+    echo "Error: neither podman nor docker is installed." >&2
+    exit 1
 fi
-$CONTAINER_CMD run -d --rm --name showroom-httpd -p 8443:80 -v "./www:/usr/local/apache2/htdocs/" docker.io/httpd:2.4
-echo "Serving lab content on http://localhost:8443/index.html"
+
+# Running, meaning actually serving.
+is_running() {
+    [ -n "$($CONTAINER_CMD ps --quiet --filter "name=^${CONTAINER_NAME}$")" ]
+}
+
+# Present, but not necessarily running. With --rm this is only briefly
+# true after a kill. The name stays taken until removal finishes.
+container_exists() {
+    $CONTAINER_CMD container inspect "$CONTAINER_NAME" &> /dev/null
+}
+
+do_start() {
+    if is_running; then
+        echo "Already serving on http://localhost:${HOST_PORT}/index.html"
+        return 0
+    fi
+    if [ ! -d "$SITE_DIR" ]; then
+        echo "Error: ${SITE_DIR} does not exist. Run utilities/lab-build first." >&2
+        exit 1
+    fi
+
+    echo "Starting server process..."
+    # :ro because the preview never writes back. :Z so SELinux hosts
+    # relabel the mount and httpd can read it.
+    $CONTAINER_CMD run -d --rm --name "$CONTAINER_NAME" \
+        -p "${HOST_PORT}:${CONTAINER_PORT}" \
+        -v "${SITE_DIR}:${CONTAINER_DOCROOT}:ro,Z" \
+        "$IMAGE"
+    echo "Serving lab content on http://localhost:${HOST_PORT}/index.html"
+}
+
+do_stop() {
+    if ! container_exists; then
+        echo "Not running. Nothing to stop."
+        return 0
+    fi
+
+    echo "Stopping serve process..."
+    $CONTAINER_CMD kill "$CONTAINER_NAME" > /dev/null
+
+    # Removal after a kill is not instant. Wait for it so an immediate
+    # restart does not hit "container name is already in use".
+    for _ in $(seq 1 50); do
+        container_exists || break
+        sleep 0.1
+    done
+    echo "Stopped serve process."
+}
+
+do_status() {
+    if is_running; then
+        echo "Running on http://localhost:${HOST_PORT}/index.html"
+    else
+        echo "Not running."
+    fi
+}
+
+case "${1:-start}" in
+    start)   do_start ;;
+    stop)    do_stop ;;
+    restart) do_stop; do_start ;;
+    status)  do_status ;;
+    *)
+        echo "Usage: $(basename "$0") [start|stop|restart|status]" >&2
+        exit 1
+        ;;
+esac
