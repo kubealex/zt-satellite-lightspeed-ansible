@@ -341,7 +341,22 @@
     #
     # Unlike the ansible.controller.job_template module, the REST API does not
     # take credentials inline on the job template itself - they are associated
-    # through this sub-endpoint, which no-ops on an already-attached id.
+    # through this sub-endpoint.
+    #
+    # That association is NOT idempotent. Controller's is_valid_relation
+    # rejects any credential whose type is already present on the template,
+    # including a re-POST of the identical id:
+    #
+    #   400 {"error": "Cannot assign multiple Machine credentials."}
+    #
+    # So the attach is guarded by what is already there. Compared as strings
+    # because item is a string here for the same templating reason described
+    # below, while the ids from the API are integers.
+    #
+    # The guard covers a re-run, not a repair: if a DIFFERENT credential of
+    # one of these types is attached, the POST still fails with Controller's
+    # message above rather than replacing it. Detaching first would mean a
+    # disassociate pass, which the lab has no need for.
     #
     # The body is a hand-written JSON string, not a dict, and that is
     # deliberate. Every other id in this playbook goes to a DRF relation
@@ -356,7 +371,13 @@
     # other hand, documents that a string body under body_format: json is
     # passed through as pre-formatted JSON, so `{"id": 3}` reaches Controller
     # with the 3 unquoted.
+    - name: List the credentials already on the Job Template
+      ansible.builtin.uri:
+        url: "{{ controller_api }}/job_templates/{{ job_template_id }}/credentials/"
+      register: r_jt_creds
+
     - name: Attach the Satellite API and Machine credentials
+      when: (item | string) not in (r_jt_creds.json.results | map(attribute='id') | map('string') | list)
       ansible.builtin.uri:
         url: "{{ controller_api }}/job_templates/{{ job_template_id }}/credentials/"
         method: POST
