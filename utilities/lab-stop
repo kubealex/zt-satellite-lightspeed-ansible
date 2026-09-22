@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 #
+# Stop the local preview server. The logic lives in lab-serve so there
+# is only one implementation to maintain.
 
-echo "Stopping serve process..."
-# Check if podman exists, otherwise use docker
-CONTAINER_CMD="docker"
-if command -v podman &> /dev/null; then
-    CONTAINER_CMD="podman"
-fi
-$CONTAINER_CMD kill showroom-httpd
-echo "Stopped serve process."
+set -euo pipefail
+
+exec "$(dirname "${BASH_SOURCE[0]}")/lab-serve" stop

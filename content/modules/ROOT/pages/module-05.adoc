@@ -2,22 +2,22 @@
 
 == Verify the Closed Loop
 
-Module 4 wired everything together: a successful Satellite webhook now
-launches an AAP Job Template that finds and remediates Critical- and
-Important-severity CVEs across *every* affected host, with zero manual
-intervention. This module proves it - you'll trigger the pipeline for
-real (with a job on `rhel1.lab`) and watch the vulnerable packages get
-fixed automatically on *both* `rhel1.lab` and `rhel2.lab`, even though
-only one host fired the webhook.
+Module 4 wired everything together. A successful Satellite webhook now
+launches an AAP Job Template that finds and remediates CVEs rated
+Critical or Important across *every* affected host, with zero manual
+intervention. This module proves it. Triggering the pipeline for real,
+with a job on `rhel1.lab`, fixes the vulnerable packages automatically
+on *both* `rhel1.lab` and `rhel2.lab`, even though only one host fired
+the webhook.
 
-Both managed hosts - `rhel1.lab` and `rhel2.lab` - are registered to
+Both managed hosts, `rhel1.lab` and `rhel2.lab`, are registered to
 Satellite and reporting in:
 
 .Managed hosts in Satellite
 image::hosts-registered.png[Satellite Hosts list showing rhel1.lab and rhel2.lab]
 
 ======
-First, let's check the current (vulnerable) package versions.
+First, check the current (vulnerable) package versions.
 
 .Step 1 - Check the current (vulnerable) package versions
 [%collapsible]
@@ -31,7 +31,7 @@ check *both* hosts. On the `rhel1.lab terminal` tab:
 rpm -q openssl openssl-libs gnutls tar
 ----
 
-You should see the deliberately-old versions seeded during lab setup:
+You should see the deliberately old versions seeded during lab setup:
 
 [source,text]
 ----
@@ -49,7 +49,7 @@ rpm -q openssl openssl-libs gnutls tar
 ----
 
 The OpenSSL versions match `rhel1.lab`. `gnutls` and `tar` are already
-current here - lab setup only downgraded those two on `rhel1.lab`:
+current here, because lab setup only downgraded those two on `rhel1.lab`:
 
 [source,text]
 ----
@@ -59,10 +59,10 @@ gnutls-3.8.10-3.el10_1.x86_64
 tar-1.35-9.el10_1.x86_64
 ----
 
-Keep this output around to compare against later. Here is what the
-automation will - and will not - do with these packages. Recall from
-Module 4 that remediation is deliberately scoped to *Critical* and
-*Important* severity only:
+Keep this output around to compare against later. The table below shows
+what the automation will do with these packages, and what it will leave
+alone. Recall from Module 4 that remediation is deliberately scoped to
+*Critical* and *Important* severity only:
 
 [cols="1,1,1,2",options="header"]
 |===
@@ -71,51 +71,51 @@ Module 4 that remediation is deliberately scoped to *Critical* and
 | `openssl`
 | `3.5.1-4.el10_1`
 | `3.5.1-7.el10_1`
-| RHSA-2026:1472 - *Important*
+| RHSA-2026:1472 (*Important*)
 
 | `openssl-libs`
 | `3.5.1-4.el10_1`
 | `3.5.1-7.el10_1`
-| RHSA-2026:1472 - *Important*
+| RHSA-2026:1472 (*Important*)
 
 | `gnutls`
 | `3.8.10-2.el10`
 | _unchanged_
-| RHSA-2026:3477 - Moderate
+| RHSA-2026:3477 (Moderate)
 
 | `tar`
 | `1.35-7.el10`
 | _unchanged_
-| RHSA-2026:0002 - Moderate
+| RHSA-2026:0002 (Moderate)
 |===
 
 Only the two OpenSSL packages move. Updates for `gnutls` and `tar` are
-sitting in Satellite as well, but their errata are *Moderate* - below
-the Critical/Important threshold this lab enforces - so the automation
-deliberately leaves them where they are. That is the policy doing its
-job, not a gap in the remediation.
+sitting in Satellite as well, but their errata are *Moderate*. That is
+below the Critical/Important threshold this lab enforces, so the
+automation deliberately leaves them where they are. That is the policy
+doing its job, not a gap in the remediation.
 
 Satellite's own Vulnerability dashboard corroborates this. Under
 *Red Hat Lightspeed -> Vulnerability*, both hosts show up as affected by
-an *Important*-severity OpenSSL flaw (`CVE-2025-15467`, CVSS 9.8), with
+an OpenSSL flaw rated *Important* (`CVE-2025-15467`, CVSS 9.8), with
 *Systems Affected = 2*. That is one of the CVEs closed by
-RHSA-2026:1472 - the erratum in the table above - and exactly the kind
-of Critical/Important CVE this lab auto-remediates:
+RHSA-2026:1472, the erratum in the table above. It is exactly the kind
+of Critical or Important CVE this lab auto-remediates:
 
-.Vulnerability dashboard before remediation - one Important CVE affecting both hosts
+.Vulnerability dashboard before remediation, showing one Important CVE affecting both hosts
 image::vulnerabilities-before-remediation.png[Vulnerability dashboard showing one Important-severity CVE affecting two systems]
 =====
 ======
 
 ======
-Next, we'll trigger a remote execution job on Satellite - this is what fires the webhook.
+Next, trigger a remote execution job on Satellite. This is what fires the webhook.
 
 .Step 2 - Trigger a remote execution job on Satellite
 [%collapsible]
 =====
 On the `satellite.lab terminal` tab, trigger a remote execution job
 against `rhel1.lab`. This is the same kind of job Satellite runs for
-day-to-day administration - the only difference is that now, a
+day-to-day administration. The only difference is that now, a
 *successful* run of one is exactly what fires the webhook:
 
 [source,bash,role="execute"]
@@ -128,8 +128,8 @@ hammer job-invocation create \
 
 In the Satellite Web UI (*Monitor -> Jobs*), this job shows as succeeded
 against `rhel1.lab`. That *successful remote-execution job* is the event
-that fires the webhook into AAP - and, from here on, the whole loop runs
-on its own:
+that fires the webhook into AAP. From here on, the whole loop runs on
+its own:
 
 .Satellite remote-execution job succeeded on rhel1.lab
 image::satellite-remediation-job-success.png[Satellite job invocation detail page showing the Run Command job succeeded on rhel1.lab]
@@ -137,14 +137,14 @@ image::satellite-remediation-job-success.png[Satellite job invocation detail pag
 ======
 
 ======
-Now let's watch the Job Template it launches run to completion.
+Now watch the Job Template it launches run to completion.
 
 .Step 3 - Watch the Job Template launch and finish
 [%collapsible]
 =====
-Back on `aap1.lab terminal`, watch for the "Vulnerability Package
-Finder and Remediator" Job Template - launched automatically by the
-rulebook you wired up in Module 4 - to start and finish:
+Back on `aap1.lab terminal`, watch for the "Vulnerability Package Finder
+and Remediator" Job Template to start and finish. The rulebook wired up
+in Module 4 launches it automatically:
 
 [source,bash,role="execute"]
 ----
@@ -168,19 +168,20 @@ curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/$JOB_ID/stdout/?format=txt" | tail -60
 
 [TIP]
 ====
-If the job status shows `failed`, the `stdout` output above is the
-first place to look. Common causes: the Satellite API credential/URL
+If the job status shows `failed`, the `stdout` output above is the first
+place to look. Common causes are the Satellite API credential or URL
 (Module 4 Step 2), the Execution Environment not having `uv` (it was
-pre-built during lab setup - see Module 4 Step 1), `vulnerability_remediation.py`
-not being present in the repo (Module 4 Step 1), or - if the *scan* plays
-succeed but the *install* play fails with `Permission denied (publickey)`
-- the Machine credential missing from the Job Template (Module 4 Step 3).
+pre-built during lab setup, see Module 4 Step 1), and
+`vulnerability_remediation.py` not being present in the repo (Module 4
+Step 1). If the *scan* plays succeed but the *install* play fails with
+`Permission denied (publickey)`, the Machine credential is missing from
+the Job Template (Module 4 Step 3).
 ====
 =====
 ======
 
 ======
-Finally, let's confirm the packages were actually remediated.
+Finally, confirm the packages were actually remediated.
 
 .Step 4 - Confirm the packages were actually remediated
 [%collapsible]
@@ -209,10 +210,10 @@ openssl-libs-3.5.1-7.el10_1.x86_64
 ----
 
 `openssl` and `openssl-libs` went from `3.5.1-4.el10_1` to
-`3.5.1-7.el10_1` - the build shipped in RHSA-2026:1472, the *Important*
-erratum that closes `CVE-2025-15467`. `gnutls` and `tar` are unchanged
-from Step 1 (`3.8.10-2.el10` and `1.35-7.el10` on `rhel1.lab`), because
-their pending errata are only *Moderate*:
+`3.5.1-7.el10_1`. That is the build shipped in RHSA-2026:1472, the
+*Important* erratum that closes `CVE-2025-15467`. `gnutls` and `tar` are
+unchanged from Step 1 (`3.8.10-2.el10` and `1.35-7.el10` on
+`rhel1.lab`), because their pending errata are only *Moderate*:
 
 [cols="1,1,1,2",options="header"]
 |===
@@ -221,57 +222,56 @@ their pending errata are only *Moderate*:
 | `openssl`
 | `3.5.1-4.el10_1`
 | `3.5.1-7.el10_1`
-| Upgraded - RHSA-2026:1472 (*Important*)
+| Upgraded by RHSA-2026:1472 (*Important*)
 
 | `openssl-libs`
 | `3.5.1-4.el10_1`
 | `3.5.1-7.el10_1`
-| Upgraded - RHSA-2026:1472 (*Important*)
+| Upgraded by RHSA-2026:1472 (*Important*)
 
 | `gnutls`
 | `3.8.10-2.el10`
 | `3.8.10-2.el10`
-| Not remediated - Moderate, below threshold
+| Not remediated. Moderate, below threshold.
 
 | `tar`
 | `1.35-7.el10`
 | `1.35-7.el10`
-| Not remediated - Moderate, below threshold
+| Not remediated. Moderate, below threshold.
 |===
 
-If the OpenSSL versions changed on *both* hosts, congratulations -
-the entire loop is closed: Satellite fired a webhook
-(for a job on `rhel1.lab` only), EDA validated and routed it, AAP
-launched a single job that found the applicable Critical/Important CVEs
-across the fleet via Red Hat Lightspeed, and Ansible installed the exact
-packages needed to fix them on *every* affected host - including
-`rhel2.lab`, which never fired a webhook of its own - with zero manual
-intervention.
+OpenSSL versions that changed on *both* hosts confirm the entire loop is
+closed. Satellite fired a webhook for a job on `rhel1.lab` only. EDA
+validated and routed it. AAP launched a single job that found the
+applicable Critical and Important CVEs across the fleet via Red Hat
+Lightspeed. Ansible then installed the exact packages needed to fix them
+on *every* affected host, including `rhel2.lab`, which never fired a
+webhook of its own. None of it required manual intervention.
 
 Back in Satellite's *Red Hat Lightspeed -> Vulnerability* dashboard, the
-Important-severity CVE from Step 1 is gone: *CVEs with critical severity*
+CVE rated Important from Step 1 is gone. *CVEs with critical severity*
 and *CVEs with important severity* both read *0*, and the OpenSSL CVE that
 previously affected two systems no longer appears in the list.
 
-.Vulnerability dashboard after remediation - no Critical or Important CVEs remain
+.Vulnerability dashboard after remediation, with no Critical or Important CVEs remaining
 image::vulnerabilities-after-remediation.png[Vulnerability dashboard showing zero Critical and zero Important CVEs after remediation]
 
 [NOTE]
 ====
 The Vulnerability dashboard only reflects the fix once each host
-re-reports its package inventory to Satellite. `insights-client` does this
-on a schedule, so there can be a short delay between the AAP job finishing
-and the dashboard clearing; you can force an immediate refresh by running
-`insights-client` on each host. The `rpm -q` output above, by contrast,
-changes the moment the AAP job completes.
+re-reports its package inventory to Satellite. `insights-client` does
+this on a schedule, so there can be a short delay between the AAP job
+finishing and the dashboard clearing. Running `insights-client` on each
+host forces an immediate refresh. The `rpm -q` output above, by
+contrast, changes the moment the AAP job completes.
 ====
 
 [NOTE]
 ====
-In the job's `PLAY RECAP` (Step 3) you'll see one line per affected host.
-A host that was already up to date shows `skipped` (nothing to install);
-a host that needed patches shows `changed`. That's the fleet-wide sweep
-in action - each host is remediated with exactly its own package set,
+The job's `PLAY RECAP` (Step 3) shows one line per affected host. A host
+that was already up to date shows `skipped`, meaning nothing to install.
+A host that needed patches shows `changed`. That is the fleet-wide sweep
+in action. Each host is remediated with exactly its own package set,
 independent of which host triggered the run.
 ====
 =====

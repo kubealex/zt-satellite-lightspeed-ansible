@@ -2,22 +2,22 @@
 
 == Explore Detected CVEs
 
-Before wiring up any automation, let's look at what Satellite already
-knows about. `rhel1.lab` and `rhel2.lab` were seeded with a handful of
-deliberately vulnerable packages during lab setup and have already
+Before wiring up any automation, review what Satellite already knows
+about. `rhel1.lab` and `rhel2.lab` were seeded with a handful of
+deliberately vulnerable packages during lab setup. Both have already
 reported their installed packages back to Satellite via `insights-client`.
 Satellite cross-references that against Red Hat's published CVE data to
-tell you exactly which hosts are affected by which CVEs - without
-either host ever leaving the lab network.
+identify which hosts are affected by which CVEs. Neither host leaves the
+lab network.
 
 ======
-First, let's open the Vulnerability dashboard.
+First, open the Vulnerability dashboard.
 
 .Step 1 - Open the Vulnerability dashboard
 [%collapsible]
 =====
 Click on the tab labelled `Satellite Web UI` (log in with the same
-credentials from Module 1, if you aren't already).
+credentials from Module 1, if you are not already).
 
 In the left navigation, go to *Red Hat Lightspeed -> Vulnerability*.
 
@@ -25,16 +25,16 @@ In the left navigation, go to *Red Hat Lightspeed -> Vulnerability*.
 image::vulnerability-service-menu-bar.png[]
 
 This page is powered by Satellite's own, on-premises-hosted Red Hat
-Lightspeed Vulnerability service. Despite the similar name, it's not
-the same as the `console.redhat.com` cloud dashboard. Everything you
-see here comes from CVE/vulnerability data that was already synced into
-Satellite during lab setup, cross-referenced against each host's
-package list. As well, no data leaves the Satellite server.
+Lightspeed Vulnerability service. Despite the similar name, it is not
+the same as the `console.redhat.com` cloud dashboard. Everything shown
+here comes from CVE data that was already synced into Satellite during
+lab setup, cross-referenced against each host's package list. No data
+leaves the Satellite server.
 =====
 ======
 
 ======
-Next, we'll review the CVEs Satellite has already detected.
+Next, review the CVEs Satellite has already detected.
 
 .Step 2 - Review the detected CVEs
 [%collapsible]
@@ -54,9 +54,9 @@ image::vulnerabilities-sort.png[]
 
 - The *Systems Affected* count links through to exactly which hosts
   (`rhel1.lab`, `rhel2.lab`, or both) are impacted by each CVE.
-- Not every CVE necessarily has a fix available *yet* in Satellite - a
-  CVE only becomes actionable once Satellite has synced an erratum
-  (patch) that resolves it.
+- Not every CVE has a fix available *yet* in Satellite. A CVE becomes
+  actionable only once Satellite has synced an erratum (patch) that
+  resolves it.
 
 .Systems affected
 image:vulnerabilities-systems-affected.png[]
@@ -65,7 +65,7 @@ image:vulnerabilities-systems-affected.png[]
 ======
 
 =======
-Finally, let's drill into one CVE to see exactly what fixes it.
+Finally, drill into one CVE to see exactly what fixes it.
 
 .Step 3 - Drill into one CVE's details
 [%collapsible]
@@ -75,8 +75,7 @@ Click into any CVE affecting 2 systems.
 .Click into a CVE
 image::vulnerabilities-affected.png[]
 
-The detail page
-shows:
+The detail page shows:
 
 - The full CVE description and CVSS score
 - Which hosts are affected

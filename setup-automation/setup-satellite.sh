@@ -6,14 +6,23 @@ subscription-manager unregister
 # Delete Satellite from its inventory.
 hammer host delete --name satellite.lab
 
-# TODO: Delete any activation keys created for this lab, e.g.:
-# hammer activation-key delete --name "<Activation Key Name>" --organization "Acme Org"
+# Delete the key this script creates below. `hammer activation-key
+# create` rejects a duplicate name, so this keeps re-provisioning
+# idempotent.
+hammer activation-key delete --name "RHEL10" --organization "Acme Org" || true
+
+# Module 3 creates these two, and hammer rejects duplicate names here
+# too. Delete the webhook first. It references the template.
+hammer webhook delete --name "AAP Event Driven Ansible Webhook" || true
+hammer webhook-template delete --name "Satellite Remote Execution Host Job JSON" || true
 
 # Get the latest CVE map from Red Hat and copy it to the Foreman directory so that it can be used by the Foreman CVE plugin to determine which CVEs are applicable to the registered hosts.
 curl -o cvemap.xml https://security.access.redhat.com/data/meta/v1/cvemap.xml
 cp cvemap.xml /var/lib/foreman/
 
-# TODO: Add any additional lab-specific reset/setup steps here.
+# The rest of this script builds the lab environment. It registers the
+# two RHEL hosts, installs the deliberately vulnerable packages, and
+# uploads an initial insights report.
 
 # Create an Activation Key for RHEL 10 content, which will be used by the RHEL 10 client system to register to Satellite and receive the RHEL 10 content.
 hammer activation-key create --name "RHEL10" --organization "Acme Org" --lifecycle-environment "Library" --content-view "Default Organization View"
