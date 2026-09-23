@@ -23,3 +23,11 @@ by the module and step that uses each one.
 | [setup-automation/files-aap1/create-satellite-credential.yml](setup-automation/files-aap1/create-satellite-credential.yml) | Step 2 | Creates the Controller credential type + credential that injects Satellite admin credentials into the Job Template, so the rulebook never has to know them. |
 | [setup-automation/files-aap1/create-controller-project.yml](setup-automation/files-aap1/create-controller-project.yml) | Step 3 | Creates the SCM credential (reusing Module 3's deploy key), the Controller Project pointing at the self-hosted `vulnerability-remediation` repo, and the Job Template (with the custom EE, and both the Satellite and Machine credentials attached). |
 | [setup-automation/files-aap1/wire-rulebook.yml](setup-automation/files-aap1/wire-rulebook.yml) | Step 4 | Creates the AAP Controller credential in EDA, publishes the updated rulebook to the self-hosted repo, resyncs the EDA Project, and recreates the Activation. |
+
+## Further reading
+
+[docs/EDA_WEBHOOK_SETUP.md](docs/EDA_WEBHOOK_SETUP.md) is a manual, raw-API
+CLI walkthrough of everything the playbooks above automate, including
+troubleshooting notes. Use it as a reference if a call ever needs to be made
+by hand, or if you're porting this pattern somewhere the `ansible.controller`
+/ `ansible.eda` collections aren't installed.
