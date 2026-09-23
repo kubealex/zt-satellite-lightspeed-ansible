@@ -319,3 +319,5 @@ template, the webhook itself, the vulnerability finder, the remediation
 playbook, and the Controller/EDA wiring, is documented and available in
 the lab's own GitHub repo:
 https://github.com/rhpds/zt-satellite-lightspeed-ansible.
+
+NOTE: You may be familiar with the errata view in Satellite as a means for remediating vulnerabilities. This feature is still available in Satellite. The difference between the two approaches to remediation is that the former presents a view via Red Hat Security Advisories (RHSA), Red Hat Bug Advisories (RHBA), and Red Hat Enhancement Advisories (RHEA). As we have seen in this lab, Lightspeed vulnerability presents a view via CVEs. You can learn more about the differences between the two approaches in the https://docs.redhat.com/en/documentation/red_hat_satellite/6.19/html/managing_hosts/patching-hosts-through-errata[Red Hat Satellite documentation].

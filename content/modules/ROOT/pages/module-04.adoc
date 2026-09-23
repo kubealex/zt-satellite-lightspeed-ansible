@@ -61,9 +61,9 @@ instead.
 ====
 
 ======
-First, review the pre-populated finder and remediation files.
+First, review the included files required for the remediation process.
 
-.Step 1 - Review the pre-populated finder + remediation files
+.Step 1 - Review the files required for the remediation process
 [%collapsible]
 =====
 Three files were already placed on `aap1.lab` during lab setup,
@@ -71,6 +71,8 @@ self-hosted as a git repo at `~/vulnerability-remediation`. This is the
 same pattern as the `~/satellite-webhook` repo from Module 3, reusing
 its deploy key. It keeps this module focused on *wiring things together*
 rather than on copy-pasting an ~800-line script by hand.
+
+If you would like to review the code and ansible playbooks, they are available in the https://github.com/rhpds/zt-satellite-lightspeed-ansible/blob/8975dbe9d64379f217d4555188740e3d79037f56/README.md[README.md file in github repository].
 
 Click on the tab labelled `aap1.lab terminal`, then take a look:
 
