@@ -13,6 +13,9 @@ closing the remediation loop end to end. A webhook from a single host is
 only the *trigger*. The remediation itself is fleet-wide, not scoped to
 whichever host happened to fire the event.
 
+.How the remediation flow works
+image::remediation-sequence-diagram.png[Sequence diagram showing the rulebook launching the Job Template, vulnerability_remediation.py querying Satellite's Lightspeed Vulnerability and Katello errata APIs, then Ansible installing the fixed packages on every affected host]
+
 `vulnerability_remediation.py` is a script written specifically for
 this lab. It logs in to `satellite.lab` and asks two of its APIs a
 question each:

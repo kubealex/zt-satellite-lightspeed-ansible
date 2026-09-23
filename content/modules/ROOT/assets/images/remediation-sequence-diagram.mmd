@@ -1,0 +1,31 @@
+sequenceDiagram
+    participant Sat as Satellite
+    participant GW as AAP Gateway (:443)
+    participant EDA as EDA Event Stream
+    participant Act as EDA Activation (rulebook)
+    participant Ctrl as AAP Controller
+    participant Script as vulnerability_remediation.py
+    participant Host as Affected hosts
+
+    Note over Sat: Remote execution job succeeds
+    Sat->>GW: HTTPS POST (Basic Auth)
+    GW->>EDA: routes to external_event_stream/uuid/post/
+    EDA->>EDA: validates username/password
+    EDA->>Act: delivers event to running rulebook
+    Act->>Act: rule fires, logs event
+
+    Act->>Ctrl: run_job_template(Vulnerability Package Finder and Remediator, extra_vars: host_name)
+    Ctrl->>Script: run unscoped scan
+    Script->>Sat: query Red Hat Lightspeed Vulnerability API for CVEs
+    Sat-->>Script: CVEs and which hosts they affect
+    Script->>Sat: query Katello errata API for fixes
+    Sat-->>Script: errata and the packages that fix them
+    Script-->>Ctrl: hosts with at least one installable remediation
+
+    loop For each affected host
+        Ctrl->>Script: run per-host scan (--host)
+        Script->>Sat: re-query Katello for that host's installed packages
+        Sat-->>Script: installed package versions
+        Script-->>Ctrl: exact packages that host needs
+        Ctrl->>Host: ansible.builtin.dnf install
+    end
