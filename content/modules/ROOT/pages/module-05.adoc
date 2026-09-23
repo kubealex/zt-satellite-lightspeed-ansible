@@ -166,6 +166,12 @@ JOB_ID=$(echo "$JOB" | python3 -c "import sys,json; print(json.load(sys.stdin)['
 curl -sk -u "$CTRL_AUTH" "$CTRL_API/jobs/$JOB_ID/stdout/?format=txt" | tail -60
 ----
 
+Here's what the output should look like:
+
+.Remediation output
+image::closed-loop-remediating.png[]
+
+
 [TIP]
 ====
 If the job status shows `failed`, the `stdout` output above is the first

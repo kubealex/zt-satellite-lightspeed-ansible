@@ -6,7 +6,7 @@ This lab demonstrates proactive remediation. Red Hat Satellite Lightspeed vulner
 the CVEs affecting managed hosts. Ansible Automation Platform (AAP) then
 remediates them automatically, without manual intervention.
 
-The intention of this lab is to show you how all these components work together to automate the remediation of vulnerabilities, to respond quickly to increased pace of vulnerability discovery due to the proliferation of LLM models. Implementation details in this lab are sparse by design. The implementation of the end-to-end solution can be found in the https://github.com/ansible/satellite-lightspeed-vulnerability-lab[README.md file of this repository].
+The intention of this lab is to show you how all these components work together to automate the remediation of vulnerabilities, to respond quickly to increased pace of vulnerability discovery due to the proliferation of LLM models. Implementation details in this lab are sparse by design. The implementation of the end-to-end solution can be found in the https://github.com/rhpds/zt-satellite-lightspeed-ansible[README.md file of this repository].
 
 Review this https://github.com/rhpds/zt-satellite-lightspeed-ansible/blob/fbd70f08b68e3712ba7e413dff873ea115e77d1f/docs/EDA_WEBHOOK_SETUP.md[documentation for architecture details].
 
