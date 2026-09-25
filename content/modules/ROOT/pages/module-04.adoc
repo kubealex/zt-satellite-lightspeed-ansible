@@ -69,7 +69,7 @@ First, review the included files required for the remediation process.
 .Step 1 - Review the files required for the remediation process
 [%collapsible]
 =====
-Three files were already placed on `aap1.lab` during lab setup,
+The required files were already placed on `aap1.lab` during lab setup,
 self-hosted as a git repo at `~/vulnerability-remediation`. This is the
 same pattern as the `~/satellite-webhook` repo from Module 3, reusing
 its deploy key. It keeps this module focused on *wiring things together*

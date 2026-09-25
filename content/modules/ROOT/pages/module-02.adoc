@@ -54,14 +54,15 @@ a few things as you browse the list:
 .Vulnerabilities sort button
 image::vulnerabilities-sort.png[]
 
-- The *Systems Affected* count links through to exactly which hosts
-  (`rhel1.lab`, `rhel2.lab`, or both) are impacted by each CVE.
-- Not every CVE has a fix available yet in Satellite. A CVE becomes
-  actionable only once Satellite has synced an erratum (patch) that
-  resolves it.
+The *Systems Affected* count links through to exactly which hosts
+(`rhel1.lab`, `rhel2.lab`, or both) are impacted by each CVE.
 
 .Systems affected
 image:vulnerabilities-systems-affected.png[]
+
+Not every CVE has a fix available yet in Satellite. A CVE becomes
+actionable only once Satellite has synced an erratum (patch) that
+resolves it.
 
 =====
 ======

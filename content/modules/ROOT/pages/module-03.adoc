@@ -17,7 +17,7 @@ and AAP's EDA fit together to close the remediation loop. It does not
 teach every detail of configuring EDA itself.
 ====
 
-The other end of the pipe is still missing. *Satellite* does not know to
+The other end of the pipe is still missing. *Satellite* does not know how to
 call that Event Stream yet. This module configures Satellite's webhook
 so that Satellite calls AAP's EDA Event Stream every time a remote
 execution job succeeds on a host. That closes the loop.
@@ -123,10 +123,13 @@ Next, create the webhook itself, pointing it at the Event Stream.
 .Step 2 - Create the webhook
 [%collapsible]
 =====
-The webhook needs three things `satellite.lab` does not have locally.
-They are the Basic Auth username and password AAP's Event Stream expects, and
-that Event Stream's URL. The setup script on `aap1.lab` already generated all three,
-saving the credentials to a file in `aap1-user`'s home directory.
+The webhook needs three things `satellite.lab` does not have locally:
+
+- *Basic Auth username and password AAP's Event Stream expects
+- *Event Stream's URL.
+
+The setup script on `aap1.lab` already generated all three,
+saving the credentials to a file in `aap1-user` home directory.
 
 Rather than logging into `aap1.lab` and copying those values out by
 hand, `/root/create-webhook.yml` (pre-populated during lab setup)
