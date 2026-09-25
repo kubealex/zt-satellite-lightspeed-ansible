@@ -125,8 +125,8 @@ Next, create the webhook itself, pointing it at the Event Stream.
 =====
 The webhook needs three things `satellite.lab` does not have locally:
 
-- *Basic Auth username and password AAP's Event Stream expects
-- *Event Stream's URL.
+- Basic Auth username and password AAP's Event Stream expects
+- Event Stream's URL.
 
 The setup script on `aap1.lab` already generated all three,
 saving the credentials to a file in `aap1-user` home directory.
